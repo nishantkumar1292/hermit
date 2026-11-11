@@ -165,6 +165,45 @@ struct OpenProjectPaletteScopeTests {
         #expect(titles.firstIndex(of: "a-long-path-index").map { $0 >= 2 } ?? true, "the boost is capped")
     }
 
+    /// Seen live: `mapley` (old, rarely used) ranked above `maplekids`
+    /// (Claude ran there 28 minutes ago, used far more). Both start with
+    /// `maple`, so their text scores are equal; both boosts were at the old
+    /// cap of 8, so the shorter name won.
+    @Test
+    func an_equal_match_goes_to_the_folder_used_more_recently_and_more_often() throws {
+        let fixture = try makeFixture()
+        let home = fixture.home
+        let mapley = candidate("\(home)/Documents/mine/mapley", home: home, hoursAgo: 60 * 24, uses: 3)
+        let maplekids = candidate("\(home)/dev/mine/maplekids", home: home, hoursAgo: 28.0 / 60, uses: 400, branch: "main")
+        #expect(mapley.frecency(now: now) >= 8, "the old cap made the two boosts equal")
+        for order in [[mapley, maplekids], [maplekids, mapley]] {
+            let scope = makeScope(fixture, candidates: order)
+            #expect(Array(rows(scope, "maple", fixture).map(\.title).prefix(2)) == ["maplekids", "mapley"])
+        }
+    }
+
+    /// The guard: frecency decides only between matches of one kind. A
+    /// prefix of the name beats a match in the name, which beats a match
+    /// only in the parent folder; in the name, a word start beats the middle
+    /// of a word, however much the other folder is used.
+    @Test
+    func a_clearly_better_match_still_beats_frecency() throws {
+        let fixture = try makeFixture()
+        let home = fixture.home
+        let heavy = { (path: String) in
+            self.candidate(path, home: home, hoursAgo: 0.1, uses: 1000, branch: "main")
+        }
+        let scope = makeScope(fixture, candidates: [
+            heavy("\(home)/dev/xxmaplexx"),
+            heavy("\(home)/dev/maple/alpha"),
+            candidate("\(home)/dev/old-maple", home: home, source: .scan),
+            candidate("\(home)/dev/mapleboard", home: home, source: .scan),
+        ])
+        #expect(rows(scope, "maple", fixture).map(\.title) == [
+            "mapleboard", "old-maple", "xxmaplexx", "alpha", "Browse in Finder…",
+        ])
+    }
+
     @Test
     func a_folder_in_the_sidebar_is_one_row_that_switches_and_adds_another_under_option() throws {
         let fixture = try makeFixture()

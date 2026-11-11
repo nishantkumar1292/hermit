@@ -28,9 +28,11 @@ final class OpenProjectPaletteScope: PaletteScope {
     /// Rows of each section with nothing typed.
     static let recentLimit = 5
     static let repositoryLimit = 3
-    /// The most that frecency adds to a text match's score. A matched letter
-    /// is worth about 16, so the boost only breaks near ties.
-    static let boostLimit = 8
+    /// The most that frecency adds to a text match's score inside one kind
+    /// of match (`rank`): one matched letter's worth (`SearchScoring.match`).
+    /// It outweighs what the length, a gap or a slightly better bonus gives
+    /// one row over another, never a run of letters at a better place.
+    static let boostLimit = Double(SearchScoring.match)
     /// Folders that path mode lists here: enough to scroll through, where
     /// the root palette's path mode completes from 10.
     static let childLimit = 200
@@ -128,14 +130,13 @@ final class OpenProjectPaletteScope: PaletteScope {
                 + [PaletteSection(header: nil, items: [browse])]
         }
         let search = SearchQuery(query.trimmed)
-        let rows = session.search(query.trimmed).map { match in
+        let ranked = Self.rank(session.search(query.trimmed), query: query.trimmed, candidates: candidates, index: session.index, now: now)
+        // In `rank`'s order: the screen's sections are drawn as given.
+        let rows = ranked.prefix(Self.shownLimit).enumerated().map { position, match in
             let candidate = candidates[match.index]
-            let boost = min(Int(candidate.frecency(now: now)), Self.boostLimit)
             return row(for: candidate, existing: sidebar.project(at: candidate.path), now: now, context: context)
-                .with(score: -Int(match.score) - boost, highlights: session.index.highlights(search, at: match.index))
+                .with(score: position, highlights: session.index.highlights(search, at: match.index))
         }
-        .rankedByScore()
-        .prefix(Self.shownLimit)
         guard !rows.isEmpty else {
             let none = PaletteItem(
                 id: "open-project-none",
@@ -147,6 +148,57 @@ final class OpenProjectPaletteScope: PaletteScope {
             return [PaletteSection(header: nil, items: [none, browse])]
         }
         return [PaletteSection(header: nil, items: Array(rows) + [browse])]
+    }
+
+    /// The order of a typed query's matches. First the kind of match: the
+    /// name starts with the query, then the query matches in the name, then
+    /// it matches only with the parent folder. Inside one kind, the text
+    /// score plus a frecency boost of at most `boostLimit`, then frecency
+    /// itself, then the shorter name, then the order of the list.
+    ///
+    /// So two names that the query matches the same way (`mapley` and
+    /// `maplekids` for `maple`) go to the one used more recently and more
+    /// often, not to the shorter one; a capped boost alone saturates for
+    /// almost every Claude recent and left the length to decide. A better
+    /// kind of match always wins, and inside a kind a match better by more
+    /// than one letter's worth (a word start against the middle of a word)
+    /// still wins.
+    static func rank(
+        _ matches: [SearchMatch],
+        query: String,
+        candidates: [ProjectCandidate],
+        index: SearchIndex,
+        now: Date
+    ) -> [SearchMatch] {
+        let search = SearchQuery(query)
+        let scratch = SearchScratch()
+        let keyed = matches.enumerated().map { offset, match in
+            let candidate = candidates[match.index]
+            let frecency = candidate.frecency(now: now)
+            // The name's own score: a term that also matches the parent
+            // better must not lift a name match within its kind.
+            let nameScore = index.records[match.index].first.flatMap {
+                SearchIndex.score(search, fields: [$0], scratch: scratch)
+            }
+            let kind = if nameScore == nil { 2 } else if Search.hasPrefix(candidate.name, query) { 0 } else { 1 }
+            let text = Double(nameScore ?? match.score)
+            return (
+                match: match,
+                kind: kind,
+                score: text + min(frecency, boostLimit),
+                frecency: frecency,
+                length: candidate.name.count,
+                offset: offset
+            )
+        }
+        return keyed.sorted { lhs, rhs in
+            if lhs.kind != rhs.kind { return lhs.kind < rhs.kind }
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            if lhs.frecency != rhs.frecency { return lhs.frecency > rhs.frecency }
+            if lhs.length != rhs.length { return lhs.length < rhs.length }
+            return lhs.offset < rhs.offset
+        }
+        .map(\.match)
     }
 
     /// Nothing typed: the recents of Claude Code, then the repositories
