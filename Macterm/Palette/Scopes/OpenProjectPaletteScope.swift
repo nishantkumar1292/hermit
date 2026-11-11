@@ -197,8 +197,9 @@ final class OpenProjectPaletteScope: PaletteScope {
         let folder = Self.listedFolder(for: text, home: home)
         let header = folder.map { ProjectCandidates.abbreviated($0, home: home).withTrailingSlash }
         let browse = browseItem(directory: folder, context: context)
+        // Normalized, so `~/dev/../Documents/` is `~/Documents` too.
         let expanded = ProjectCandidates.expanded(text, home: home)
-        guard !ProjectCandidates.isProtected(expanded, home: home) else {
+        guard !ProjectCandidates.isProtected(ProjectCandidates.normalized(expanded) ?? expanded, home: home) else {
             return [PaletteSection(header: header, items: [browse])]
         }
         let rows = DirectorySource(childLimit: Self.childLimit).items(query: text, context: context)
@@ -320,7 +321,7 @@ final class OpenProjectPaletteScope: PaletteScope {
         guard expanded.hasPrefix("/") else { return nil }
         let trimmed = ProjectCandidates.normalized(expanded) ?? expanded
         if expanded.hasSuffix("/") { return trimmed }
-        if !ProjectCandidates.isProtected(expanded, home: home) {
+        if !ProjectCandidates.isProtected(trimmed, home: home) {
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDirectory), isDirectory.boolValue {
                 return trimmed

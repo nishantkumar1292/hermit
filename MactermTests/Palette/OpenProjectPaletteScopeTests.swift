@@ -253,6 +253,11 @@ struct OpenProjectPaletteScopeTests {
         #expect(protected.map(\.header) == ["~/Documents/"])
         #expect(protected.flatMap(\.items).map(\.id) == ["open-project-browse"], "a protected folder is never listed")
         #expect(scope.sections(for: PaletteQuery(raw: "\(home)/Documents"), context: fixture.context).flatMap(\.items).count == 1)
+        for spelling in ["\(home)/documents/", "\(home)/dev/../Documents/", "\(home)/DOCUMENTS/sec"] {
+            let ids = scope.sections(for: PaletteQuery(raw: spelling), context: fixture.context).flatMap(\.items).map(\.id)
+            #expect(ids == ["open-project-browse"], "\(spelling) is the protected folder too")
+        }
+        #expect(OpenProjectPaletteScope.listedFolder(for: "\(home)/dev/../Documents/x", home: home) == "\(home)/Documents")
     }
 
     @Test

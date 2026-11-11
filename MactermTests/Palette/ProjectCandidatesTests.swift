@@ -157,6 +157,7 @@ struct ProjectCandidatesTests {
         for path in [
             "/Users/me/Desktop", "/Users/me/Documents/a", "/Users/me/Downloads/b/c",
             "/Users/me/Library/Mobile Documents/x", "/Users/me/Library/CloudStorage/Drive/y",
+            "/Users/me/documents/a", "/USERS/ME/DESKTOP",
         ] {
             #expect(ProjectCandidates.isProtected(path, home: home), "\(path)")
         }
@@ -239,10 +240,17 @@ struct ProjectCandidatesTests {
         let worktree = "\(home)/dev/wt"
         try write("ref: refs/heads/topic\n", to: "\(home)/dev/main/.git/worktrees/wt/HEAD")
         try write("gitdir: \(home)/dev/main/.git/worktrees/wt\n", to: "\(worktree)/.git")
-        #expect(ProjectCandidates.gitInfo(at: worktree).branch == "topic")
+        #expect(ProjectCandidates.gitInfo(at: worktree, home: home).branch == "topic")
         try write("0123456789abcdef\n", to: "\(home)/dev/detached/.git/HEAD")
-        #expect(ProjectCandidates.gitInfo(at: "\(home)/dev/detached").branch == "0123456")
-        #expect(ProjectCandidates.gitInfo(at: "\(home)/dev/none").branch == nil)
+        #expect(ProjectCandidates.gitInfo(at: "\(home)/dev/detached", home: home).branch == "0123456")
+        #expect(ProjectCandidates.gitInfo(at: "\(home)/dev/none", home: home).branch == nil)
+
+        // A worktree of a repository in Documents: its HEAD is never read.
+        try write("ref: refs/heads/private\n", to: "\(home)/Documents/repo/.git/worktrees/wt/HEAD")
+        try write("gitdir: \(home)/Documents/repo/.git/worktrees/wt\n", to: "\(home)/dev/outside/.git")
+        #expect(ProjectCandidates.gitInfo(at: "\(home)/dev/outside", home: home).branch == nil)
+        try write("gitdir: ../../documents/repo/.git/worktrees/wt\n", to: "\(home)/dev/relative/.git")
+        #expect(ProjectCandidates.gitInfo(at: "\(home)/dev/relative", home: home).branch == nil, "relative, in any case")
     }
 
     // MARK: - Ranking

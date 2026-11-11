@@ -177,22 +177,26 @@ enum ProjectCandidates {
     // MARK: - Path rules
 
     /// Whether `path` is in a folder that macOS guards with a privacy
-    /// prompt (`protectedFolders`), or is one.
+    /// prompt (`protectedFolders`), or is one. Case does not count: the
+    /// default volume ignores it, so `~/documents` is `~/Documents`.
     static func isProtected(_ path: String, home: String) -> Bool {
-        protectedFolders.contains { folder in
-            let root = (home as NSString).appendingPathComponent(folder)
-            return path == root || path.hasPrefix(root + "/")
-        }
+        protectedFolders.contains { isWithin(path, (home as NSString).appendingPathComponent($0)) }
     }
 
     /// Whether the load must not touch `path`: a protected folder, anything
     /// in `~/Library` (other apps' data) or in `/Volumes` (a removable or
     /// network volume). Such a recent is kept as Claude recorded it, unchecked.
     static func isOffLimits(_ path: String, home: String) -> Bool {
-        let library = (home as NSString).appendingPathComponent("Library")
-        return isProtected(path, home: home)
-            || path == library || path.hasPrefix(library + "/")
-            || path == "/Volumes" || path.hasPrefix("/Volumes/")
+        isProtected(path, home: home)
+            || isWithin(path, (home as NSString).appendingPathComponent("Library"))
+            || isWithin(path, "/Volumes")
+    }
+
+    /// Whether `path` is `root` or in it, ignoring case.
+    private static func isWithin(_ path: String, _ root: String) -> Bool {
+        let path = path.lowercased()
+        let root = root.lowercased()
+        return path == root || path.hasPrefix(root + "/")
     }
 
     /// Folders that are never a project: home, the root, Claude's own
@@ -240,8 +244,10 @@ enum ProjectCandidates {
 
     /// The branch checked out in `path` and when its `.git` changed, read
     /// from `.git/HEAD` without running git. A worktree's `.git` file names
-    /// its git directory (`gitdir:`), which holds its HEAD.
-    static func gitInfo(at path: String) -> (branch: String?, modified: Date?) {
+    /// its git directory (`gitdir:`), which holds its HEAD — unless that
+    /// directory is off limits (a worktree of a repository in `~/Documents`),
+    /// which gives no branch.
+    static func gitInfo(at path: String, home: String) -> (branch: String?, modified: Date?) {
         let fm = FileManager.default
         let git = (path as NSString).appendingPathComponent(".git")
         var isDirectory: ObjCBool = false
@@ -255,7 +261,9 @@ enum ProjectCandidates {
                   let line = text.split(separator: "\n").first(where: { $0.hasPrefix("gitdir:") })
             else { return (nil, modified) }
             let named = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
-            gitDirectory = named.hasPrefix("/") ? named : (path as NSString).appendingPathComponent(named)
+            let absolute = named.hasPrefix("/") ? named : (path as NSString).appendingPathComponent(named)
+            gitDirectory = normalized(absolute) ?? absolute
+            guard !isOffLimits(gitDirectory, home: home) else { return (nil, modified) }
         }
         let head = (gitDirectory as NSString).appendingPathComponent("HEAD")
         guard let text = try? String(contentsOfFile: head, encoding: .utf8) else { return (nil, modified) }
@@ -357,7 +365,7 @@ enum ProjectCandidates {
                 var isDirectory: ObjCBool = false
                 guard fm.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
             }
-            let git = offLimits ? (branch: nil, modified: nil) : gitInfo(at: path)
+            let git = offLimits ? (branch: nil, modified: nil) : gitInfo(at: path, home: home)
             let time = last[path] ?? 0
             candidates[path] = ProjectCandidate(
                 path: path,
@@ -373,7 +381,7 @@ enum ProjectCandidates {
         for path in scan(roots: scanRoots(home: home, recents: Array(candidates.keys)), home: home)
             where candidates[path] == nil && !isNoise(path, home: home)
         {
-            let git = gitInfo(at: path)
+            let git = gitInfo(at: path, home: home)
             candidates[path] = ProjectCandidate(
                 path: path,
                 source: .scan,
