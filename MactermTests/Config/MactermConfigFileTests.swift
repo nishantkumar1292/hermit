@@ -108,7 +108,9 @@ struct MactermConfigFileTests {
     func default_url_is_the_config_directory_file() {
         let url = MactermConfigFile.defaultURL()
         #expect(url.lastPathComponent == "config.ghostty")
-        #expect(url.deletingLastPathComponent().path.hasSuffix("/.config/macterm"))
+        // Hermit's own folder, so it never shares a config with Macterm
+        // (`ProjectFileStore.defaultConfigDirectory`).
+        #expect(url.deletingLastPathComponent().path.hasSuffix("/.config/hermit"))
         #expect(url.deletingLastPathComponent().standardizedFileURL
             == ProjectFileStore.defaultConfigDirectory().standardizedFileURL)
     }
