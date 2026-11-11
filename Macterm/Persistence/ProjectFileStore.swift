@@ -54,7 +54,7 @@ struct ProjectFileStore {
     /// `$HOME`-first way as `defaultDirectory`, for the same reason.
     nonisolated static func defaultConfigDirectory() -> URL {
         URL(fileURLWithPath: ProjectPath.currentHome, isDirectory: true)
-            .appendingPathComponent(".config/macterm", isDirectory: true)
+            .appendingPathComponent(".config/hermit", isDirectory: true)
     }
 
     // MARK: - Scan / match

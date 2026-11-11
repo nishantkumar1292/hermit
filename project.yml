@@ -88,8 +88,8 @@ targets:
         type: file
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm
-        PRODUCT_NAME: Macterm
+        PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.hermit
+        PRODUCT_NAME: Hermit
         # Pinned so the Swift module stays `Macterm` even where PRODUCT_NAME
         # doesn't (Debug builds the bundle as "Macterm Debug.app"). Without
         # this the module would sanitize to `Macterm_Debug` and every
@@ -140,14 +140,14 @@ targets:
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # Display name (menu bar / Finder "Get Info") — wired into
         # Info.plist's CFBundleName and CFBundleDisplayName.
-        PRODUCT_DISPLAY_NAME: Macterm
+        PRODUCT_DISPLAY_NAME: Hermit
       configs:
         Debug:
           # Distinct bundle ID + display name so the debug app coexists with a
           # running release app (open won't conflate them) and logs filter
           # cleanly by subsystem (scripts/logs.sh).
-          PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.debug
-          PRODUCT_DISPLAY_NAME: Macterm Debug
+          PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.hermitd
+          PRODUCT_DISPLAY_NAME: Hermit Debug
           # The *filename* has to move too, because the Dock tile label, the
           # Cmd-Tab switcher and Finder all read the bundle's filesystem name
           # and ignore CFBundleDisplayName entirely — a debug build sitting in
@@ -160,7 +160,7 @@ targets:
           # name doesn't follow; and everything pointing at the built Debug
           # bundle by path (MactermTests' TEST_HOST, scripts/run.sh,
           # scripts/e2e.sh, scripts/e2e/conftest.py) names "Macterm Debug.app".
-          PRODUCT_NAME: Macterm Debug
+          PRODUCT_NAME: Hermit Debug
     dependencies:
       # Build ordering only: the post-build script copies the CLI binary into
       # the bundle, so it must exist before the app target finishes.
@@ -318,9 +318,9 @@ targets:
         # $(PRODUCT_NAME) can't be interpolated here — inside this target it
         # resolves to the *test bundle's* name, not the app's.
         Debug:
-          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Macterm Debug.app/Contents/MacOS/Macterm Debug"
+          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Hermit Debug.app/Contents/MacOS/Hermit Debug"
         Release:
-          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Macterm.app/Contents/MacOS/Macterm"
+          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Hermit.app/Contents/MacOS/Hermit"
 
 schemes:
   Macterm:

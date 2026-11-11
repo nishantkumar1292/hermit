@@ -22,7 +22,7 @@ xcodebuild \
 # "Macterm Debug.app", not "Macterm.app": the Debug config overrides
 # PRODUCT_NAME so the Dock/Cmd-Tab label reads "Macterm Debug" (both read
 # the bundle's filename, not CFBundleDisplayName).
-APP="$DERIVED_DATA/Build/Products/Debug/Macterm Debug.app"
+APP="$DERIVED_DATA/Build/Products/Debug/Hermit Debug.app"
 
 # `-n` forces a new instance of the bundle AT THIS PATH. Without it, `open`
 # resolves through LaunchServices, which on a dev machine has many bundles

@@ -34,4 +34,4 @@ if [ ! -x "$VENV/bin/pytest" ]; then
 fi
 
 "$VENV/bin/pytest" scripts/e2e -v \
-  --app "$DERIVED_DATA/Build/Products/Debug/Macterm Debug.app"
+  --app "$DERIVED_DATA/Build/Products/Debug/Hermit Debug.app"
