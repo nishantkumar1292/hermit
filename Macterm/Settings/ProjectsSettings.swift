@@ -145,11 +145,13 @@ struct ProjectsSettings: View {
         )
     }
 
-    /// Folder picker → new project → select it, the same as the sidebar's
-    /// "Local Folder…". Picking a directory that already backs a project makes
-    /// a second, independent one (a directory is not an identity).
+    /// The same as the sidebar's "Local Folder…": the terminal window comes
+    /// to the front, over Settings, with the palette's Open Project screen
+    /// (the system dialog when no window is open). A folder that already
+    /// backs a project gets a second, independent one (a directory is not
+    /// an identity).
     private func addLocalProject() {
-        appState.openProject(store: projectStore)
+        appState.showOpenProject(store: projectStore)
     }
 
     /// The remote sheet is attached to `MainWindow`, so it would open behind the

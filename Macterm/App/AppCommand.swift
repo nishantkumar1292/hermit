@@ -13,6 +13,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case toggleCommandPalette
     case passwordManager
     case files
+    case openProject
     // Tabs
     case newTab
     case newScratchTab
@@ -56,7 +57,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case explainOutput
     case autofillPassword
     // Projects
-    case openProject
     case newRemoteProject
     case renameProject
     case removeProject
@@ -175,7 +175,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         switch self {
         case .toggleCommandPalette,
              .passwordManager,
-             .files: .palettes
+             .files,
+             .openProject: .palettes
         case .newTab,
              .newScratchTab,
              .closePane,
@@ -216,8 +217,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .readOnlyMode,
              .explainOutput,
              .autofillPassword: .panes
-        case .openProject,
-             .newRemoteProject,
+        case .newRemoteProject,
              .renameProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
@@ -318,6 +318,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         switch self {
         case .passwordManager: .passwords
         case .files: .files
+        case .openProject: .openProject
         default: nil
         }
     }

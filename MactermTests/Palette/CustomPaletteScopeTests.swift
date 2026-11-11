@@ -646,7 +646,7 @@ struct CustomPaletteScopeTests {
         let rows = { CommandSource().emptyItems(context: context) ?? [] }
         let palettes = rows().filter { $0.category == AppCommand.Category.palettes.title }
         #expect(
-            palettes.map(\.title) == ["Password Manager", "Files", "Broken", "Kubernetes"],
+            palettes.map(\.title) == ["Password Manager", "Files", "Open Project", "Broken", "Kubernetes"],
             "custom palettes follow the built-in screens"
         )
         let kubernetes = try #require(palettes.first { $0.title == "Kubernetes" })

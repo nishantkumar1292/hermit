@@ -5,8 +5,9 @@ import Foundation
 /// screens showing form a stack (`WindowState.paletteStack`), drawn as a
 /// row of pills above the input — one per frame, the current one last —
 /// so a screen can open another and the way back stays visible. Backspace
-/// on an empty query or Escape pop one frame; clicking a pill pops back to
-/// it; running an item closes the palette as usual.
+/// on an empty query or Escape pop one frame — or close the palette, for a
+/// screen opened on its own (`PaletteFrame.isStandalone`); clicking a pill
+/// pops back to it; running an item closes the palette as usual.
 ///
 /// A new built-in scope is a case here, with its pill, plus a class
 /// conforming to `PaletteScope` in `Palette/Scopes/`; an `AppCommand` opens
@@ -20,12 +21,15 @@ import Foundation
 enum PaletteScopeID: Hashable {
     case passwords
     case files
+    /// Open Project: a folder picker over Claude Code's recents and a scan
+    /// of the code folders (`OpenProjectPaletteScope`).
+    case openProject
     /// A screen of a custom palette (`CustomPaletteFile`): its file, node,
     /// the values exported above it and the pill naming it.
     case custom(CustomPaletteTarget)
 
     /// The screens Macterm ships.
-    static let builtIn: [PaletteScopeID] = [.passwords, .files]
+    static let builtIn: [PaletteScopeID] = [.passwords, .files, .openProject]
 
     /// What the scope's pill says and shows — also the icon of the row that
     /// opens it, so the row reads as a place to go rather than a thing to do.
@@ -33,6 +37,7 @@ enum PaletteScopeID: Hashable {
         switch self {
         case .passwords: PalettePill(title: AppCommand.passwordManager.title, icon: "key.fill")
         case .files: PalettePill(title: AppCommand.files.title, icon: "doc.text.magnifyingglass")
+        case .openProject: PalettePill(title: AppCommand.openProject.title, icon: "folder.badge.plus")
         case let .custom(target): target.pill
         }
     }
@@ -45,6 +50,7 @@ enum PaletteScopeID: Hashable {
         switch self {
         case .passwords: String(localized: "Manage passwords")
         case .files: String(localized: "Browse files and folders in this project")
+        case .openProject: String(localized: "Open a folder as a project")
         case .custom: ""
         }
     }
@@ -55,6 +61,7 @@ enum PaletteScopeID: Hashable {
         switch self {
         case .passwords: .passwordManager
         case .files: .files
+        case .openProject: .openProject
         case .custom: nil
         }
     }
@@ -64,6 +71,7 @@ enum PaletteScopeID: Hashable {
         switch self {
         case .passwords: PasswordPaletteScope()
         case .files: FilesPaletteScope()
+        case .openProject: OpenProjectPaletteScope()
         case let .custom(target): CustomPaletteScope(target: target)
         }
     }
@@ -129,6 +137,10 @@ protocol PaletteScope: AnyObject {
     func activate(context: PaletteContext, onChange: @escaping @MainActor () -> Void)
     /// The frame has left the stack: cancel anything in flight.
     func deactivate()
+    /// What ⇥ puts in the input with `item` selected, nil to leave ⇥ its
+    /// focus meaning. Most screens have none: their rows are not
+    /// completions of what is typed. Open Project completes a folder's path.
+    func completion(for item: PaletteItem, query: PaletteQuery) -> String?
 }
 
 extension PaletteScope {
@@ -137,6 +149,9 @@ extension PaletteScope {
     func retry() {}
     func activate(context _: PaletteContext, onChange _: @escaping @MainActor () -> Void) {}
     func deactivate() {}
+    func completion(for _: PaletteItem, query _: PaletteQuery) -> String? {
+        nil
+    }
 }
 
 /// A screen on the palette's stack: which scope, the pill naming it, and
@@ -149,14 +164,25 @@ struct PaletteFrame: Equatable, Identifiable {
     let scopeID: PaletteScopeID
     let pill: PalettePill
     let scope: any PaletteScope
+    /// Opened on its own, not entered from the root list: Open Project
+    /// from ⌘O, the sidebar or Settings. Alone on the stack, Escape (and
+    /// Backspace at an empty field) closes the palette rather than stepping
+    /// back to a root the user never saw (`WindowState.leavingClosesPalette`).
+    let isStandalone: Bool
 
     /// A frame for `scopeID`, named by its own pill unless `pill` says
     /// otherwise — a nested screen is named by the row that opened it.
     /// `scope` stands in for the one `scopeID` would make (tests).
-    init(_ scopeID: PaletteScopeID, pill: PalettePill? = nil, scope: (any PaletteScope)? = nil) {
+    init(
+        _ scopeID: PaletteScopeID,
+        pill: PalettePill? = nil,
+        scope: (any PaletteScope)? = nil,
+        isStandalone: Bool = false
+    ) {
         self.scopeID = scopeID
         self.pill = pill ?? scopeID.pill
         self.scope = scope ?? scopeID.makeScope()
+        self.isStandalone = isStandalone
     }
 
     nonisolated static func == (lhs: PaletteFrame, rhs: PaletteFrame) -> Bool {

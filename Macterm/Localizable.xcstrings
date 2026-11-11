@@ -1716,6 +1716,22 @@
         }
       }
     },
+    "Browse in Finder…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder에서 찾아보기…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“访达”中浏览…"
+          }
+        }
+      }
+    },
     "Cancel" : {
       "localizations" : {
         "ko" : {
@@ -3355,6 +3371,22 @@
         }
       }
     },
+    "Finding projects…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 찾는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在查找项目…"
+          }
+        }
+      }
+    },
     "Finish editing the other widget first." : {
       "localizations" : {
         "ko" : {
@@ -3773,6 +3805,23 @@
         }
       }
     },
+    "Git repos" : {
+      "comment" : "Open Project screen: the section of repositories that a scan found",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 저장소"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 仓库"
+          }
+        }
+      }
+    },
     "GitHub answered %lld." : {
       "comment" : "The value is the HTTP status code of the answer from GitHub",
       "localizations" : {
@@ -3999,6 +4048,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "如果应用此布局，Macterm 会关闭部分窗格并结束其中的进程。"
+          }
+        }
+      }
+    },
+    "In sidebar" : {
+      "comment" : "Open Project screen: a folder that backs a project in the sidebar",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사이드바에 있음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已在边栏中"
           }
         }
       }
@@ -5874,6 +5940,22 @@
         }
       }
     },
+    "No projects match “%@”. Type ~/ to browse folders." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”와(과) 일치하는 프로젝트가 없습니다. 폴더를 탐색하려면 ~/를 입력하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有与“%@”匹配的项目。输入 ~/ 以浏览文件夹。"
+          }
+        }
+      }
+    },
     "No projects." : {
       "localizations" : {
         "ko" : {
@@ -6469,6 +6551,22 @@
         }
       }
     },
+    "Open a folder as a project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더를 프로젝트로 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将文件夹作为项目打开"
+          }
+        }
+      }
+    },
     "Open a project" : {
       "localizations" : {
         "ko" : {
@@ -6999,6 +7097,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预览样式"
+          }
+        }
+      }
+    },
+    "Pick a folder in %@ with the macOS dialog" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 대화상자에서 %@의 폴더 선택"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 macOS 对话框中从 %@ 选取文件夹"
+          }
+        }
+      }
+    },
+    "Pick a folder with the macOS dialog" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 대화상자에서 폴더 선택"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 macOS 对话框中选取文件夹"
           }
         }
       }
@@ -7600,6 +7730,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近标签页数量上限"
+          }
+        }
+      }
+    },
+    "Recent with Claude" : {
+      "comment" : "Open Project screen: the section of folders where Claude Code ran",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude에서 최근 사용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近在 Claude 中使用"
           }
         }
       }
@@ -8681,6 +8828,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索项目或命令..."
+          }
+        }
+      }
+    },
+    "Search projects, or type ~/ to browse folders" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 검색 또는 ~/를 입력하여 폴더 탐색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索项目，或输入 ~/ 以浏览文件夹"
+          }
+        }
+      }
+    },
+    "Search projects, ~/ to browse folders, %@ for Finder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 검색, ~/로 폴더 탐색, %@로 Finder 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索项目，~/ 浏览文件夹，%@ 打开“访达”"
           }
         }
       }

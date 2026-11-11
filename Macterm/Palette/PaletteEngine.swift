@@ -114,6 +114,32 @@ struct PaletteItem: Identifiable {
     func with(_ match: Search.Match, boost: Int = 0) -> PaletteItem {
         with(score: -Int(match.score) - boost, highlights: match.highlights)
     }
+
+    /// A copy whose action runs `after` once its own action has run, with
+    /// every other field carried forward — a screen that adds a step to
+    /// rows that another source built.
+    func followed(by after: @escaping () -> Void) -> PaletteItem {
+        let action = action
+        return PaletteItem(
+            id: id,
+            title: title,
+            subtitle: subtitle,
+            category: category,
+            keybind: keybind,
+            keybindSymbols: keybindSymbols,
+            score: score,
+            isEnabled: isEnabled,
+            opensScope: opensScope,
+            icon: icon,
+            warning: warning,
+            alt: alt,
+            searchAliases: searchAliases,
+            highlights: highlights
+        ) {
+            action()
+            after()
+        }
+    }
 }
 
 /// What a row does with ⌥ held: a second action, named so the row can show

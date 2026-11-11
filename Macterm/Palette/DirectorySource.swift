@@ -12,6 +12,10 @@ struct DirectorySource: PaletteSource {
         String(localized: "Directories", comment: "Command palette: the section of folder rows in path mode")
     }
 
+    /// The child folders listed, at most. The root palette completes from
+    /// 10; the Open Project screen lists more, to scroll through.
+    var childLimit = 10
+
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
         // A typed remote spec offers add/switch, mirroring local directories
         // (#104). No filesystem browsing — the host isn't consulted; the
@@ -84,12 +88,12 @@ struct DirectorySource: PaletteSource {
                 // Completion, not search: a prefix, folded as `Search` folds.
                 return Search.hasPrefix(name, prefix)
             }
-            // `contentsOfDirectory` order is unspecified; sort so BOTH which 10
+            // `contentsOfDirectory` order is unspecified; sort so BOTH which
             // children survive the cap AND their ranking are deterministic
             // across runs and filesystems. The cap counts directories, not
             // rows — a backed child's add-another row rides along.
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-            .prefix(10)
+            .prefix(childLimit)
             .forEach { name in
                 appendRows(name: name, fullPath: (dir as NSString).appendingPathComponent(name))
             }

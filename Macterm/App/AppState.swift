@@ -1002,12 +1002,13 @@ final class AppState {
 
     /// Show the palette on `scope` alone (nil: the root), whatever stack of
     /// screens was up. A different screen starts from an empty query — text
-    /// typed for one search means nothing to another.
-    func openCommandPalette(scope: PaletteScopeID?) {
+    /// typed for one search means nothing to another. `standalone`: Escape
+    /// closes the palette (`PaletteFrame.isStandalone`).
+    func openCommandPalette(scope: PaletteScopeID?, standalone: Bool = false) {
         guard let window = keyOrFirstWindow else { return }
         if window.paletteScope != scope || window.paletteStack.count > 1 {
             commandPaletteQuery = ""
-            window.showPaletteScope(scope)
+            window.showPaletteScope(scope, standalone: standalone)
         }
         window.isCommandPaletteVisible = true
     }
@@ -2426,24 +2427,75 @@ final class AppState {
     @ObservationIgnored
     var paneNeedsConfirmClose: (Pane) -> Bool = { $0.needsConfirmClose }
 
-    /// Shows an open panel, adds or finds the selected directory as a project,
-    /// and selects it. Returns the selected project, nil if cancelled.
-    @discardableResult
-    func openProject(store: ProjectStore) -> Project? {
+    // MARK: - Open Project
+
+    /// Open Project — ⌘O, the menu bar, the Dock, the sidebar's New Project
+    /// menu and Settings → Projects all come here:
+    /// - No terminal window: the system dialog (`browseForProject`).
+    /// - The palette already up on Open Project: ⌘O again closes it and
+    ///   opens the system dialog, in the typed folder when the query is a
+    ///   path. `PaletteResponder` sends the chord here while the palette is up.
+    /// - Else: the window comes to the front (it may be hidden, or behind
+    ///   Settings) and the palette opens on Open Project alone, so Escape
+    ///   closes it.
+    func showOpenProject(store: ProjectStore) {
+        guard let window = keyOrFirstWindow else {
+            browseForProject(store: store)
+            return
+        }
+        if window.isCommandPaletteVisible, window.paletteScope == .openProject {
+            // Read now: the close clears the query.
+            let directory = OpenProjectPaletteScope.listedFolder(for: commandPaletteQuery, home: ProjectPath.currentHome)
+            postPaletteAction = { [weak self] in self?.browseForProject(store: store, directory: directory) }
+            window.isCommandPaletteVisible = false
+            return
+        }
+        if let nsWindow = nsWindow(for: window), !nsWindow.isKeyWindow {
+            focusWindow(window)
+        }
+        openCommandPalette(scope: .openProject, standalone: true)
+    }
+
+    /// Picks a folder with the system dialog, starting in the folder given;
+    /// nil when cancelled. A seam: a test must never run a modal panel.
+    @ObservationIgnored
+    var chooseProjectFolder: @MainActor (String?) -> URL? = { directory in
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.message = String(localized: "Select a project folder")
-        guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        // Always create: picking a folder that already backs a project makes a
-        // second, independent project for it, not a jump to the existing one.
-        let project = store.create(
-            name: url.lastPathComponent,
-            path: url.path(percentEncoded: false)
-        )
+        if let directory {
+            panel.directoryURL = URL(fileURLWithPath: directory, isDirectory: true)
+        }
+        guard panel.runModal() == .OK else { return nil }
+        return panel.url
+    }
+
+    /// The system dialog (`chooseProjectFolder`), in `directory` when given:
+    /// the picked folder becomes a new project (`addProject`). Returns it,
+    /// nil if cancelled.
+    @discardableResult
+    func browseForProject(store: ProjectStore, directory: String? = nil) -> Project? {
+        guard let url = chooseProjectFolder(directory) else { return nil }
+        return addProject(name: url.lastPathComponent, path: url.path(percentEncoded: false), store: store)
+    }
+
+    /// Adds a project on `path` and selects it, with its section open in the
+    /// sidebar. Always create: a folder that already backs a project gets a
+    /// second, independent one, not a jump to the existing one.
+    @discardableResult
+    func addProject(name: String, path: String, store: ProjectStore) -> Project {
+        let project = store.create(name: name, path: path)
         selectProject(project)
+        expandInSidebar(project.id)
         return project
+    }
+
+    /// Opens the section of `projectID` in the sidebar of the window the
+    /// user is in.
+    func expandInSidebar(_ projectID: UUID) {
+        keyOrFirstWindow?.expandedProjects.insert(projectID)
     }
 
     /// A project per directory, in order, with the last one selected in

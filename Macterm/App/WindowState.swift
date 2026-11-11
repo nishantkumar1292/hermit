@@ -139,12 +139,20 @@ final class WindowState: Identifiable {
     }
 
     /// Shows `scope` alone — a screen's own chord, from wherever the
-    /// palette was — or the root for nil.
-    func showPaletteScope(_ scope: PaletteScopeID?) {
+    /// palette was — or the root for nil. `standalone`: Escape closes the
+    /// palette rather than stepping back to the root (`PaletteFrame.isStandalone`).
+    func showPaletteScope(_ scope: PaletteScopeID?, standalone: Bool = false) {
         resetPaletteStack()
         if let scope {
-            paletteStack = [PaletteFrame(scope)]
+            paletteStack = [PaletteFrame(scope, isStandalone: standalone)]
         }
+    }
+
+    /// Whether stepping out of the screen showing (Escape, or Backspace at
+    /// an empty field) closes the palette: the one screen up was opened on
+    /// its own. Every other screen steps back one frame.
+    var leavingClosesPalette: Bool {
+        paletteStack.count == 1 && paletteStack[0].isStandalone
     }
 
     /// Back to the root.

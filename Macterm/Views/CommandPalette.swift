@@ -484,9 +484,19 @@ struct CommandPalettePanel: View {
     /// input — letting the keypress fall through (`.ignored`) to default focus
     /// traversal in that case.
     private func completeQuery() -> KeyPress.Result {
-        // A scope's rows aren't completions of what is typed (its add rows
-        // quote the query back), so Tab keeps its focus meaning there.
-        guard scope == nil, !flatItems.isEmpty else { return .ignored }
+        // A screen's rows are mostly not completions of what is typed (its
+        // add rows quote the query back), so Tab keeps its focus meaning
+        // there — unless the screen completes the selected row itself (Open
+        // Project's folders, `PaletteScope.completion`).
+        if let scope {
+            guard flatItems.indices.contains(selectedIndex),
+                  let completion = scope.completion(for: flatItems[selectedIndex], query: PaletteQuery(raw: query)),
+                  completion != query
+            else { return .ignored }
+            query = completion
+            return .handled
+        }
+        guard !flatItems.isEmpty else { return .ignored }
         let top = flatItems[0]
         let completion: String = if let path = directoryPath(for: top) {
             // Re-expand a `~` query to keep the displayed prefix the user typed.
@@ -641,10 +651,16 @@ private extension CommandPalettePanel {
         windowState.pushPaletteFrame(PaletteFrame(next))
     }
 
-    /// Back one screen, starting its search empty.
+    /// Back one screen, starting its search empty — or, from a screen that
+    /// was opened on its own (`WindowState.leavingClosesPalette`), close the
+    /// palette: there is no root list behind it that the user saw.
     func leaveScope() {
         query = ""
-        windowState.popPaletteFrame()
+        if windowState.leavingClosesPalette {
+            windowState.isCommandPaletteVisible = false
+        } else {
+            windowState.popPaletteFrame()
+        }
     }
 }
 

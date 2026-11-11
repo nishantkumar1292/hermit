@@ -340,7 +340,7 @@ struct SidebarContent: View {
         ) {
             HStack(spacing: 0) {
                 Menu {
-                    Button("Local Folder…") { openProject() }
+                    Button("Local Folder…") { appState.showOpenProject(store: projectStore) }
                     Button("Remote Machine…") {
                         windowState.isNewRemoteProjectSheetPresented = true
                     }
@@ -752,7 +752,7 @@ struct SidebarContent: View {
         } else {
             // Right-click on empty space.
             Menu("New Project") {
-                Button("Local Folder…") { openProject() }
+                Button("Local Folder…") { appState.showOpenProject(store: projectStore) }
                 Button("Remote Machine…") { windowState.isNewRemoteProjectSheetPresented = true }
             }
             Button("New Scratch Tab") { appState.createScratchTab() }
@@ -994,12 +994,6 @@ struct SidebarContent: View {
                 removeProject(project)
             }
             presentation.selection = []
-        }
-    }
-
-    private func openProject() {
-        if let project = appState.openProject(store: projectStore) {
-            windowState.expandedProjects.insert(project.id)
         }
     }
 

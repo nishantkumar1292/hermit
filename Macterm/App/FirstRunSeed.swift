@@ -29,7 +29,7 @@ enum FirstRunSeed {
     static var projectPath: String { ProjectPath.currentHome }
 
     /// The name a folder-picked project would get — the directory's own
-    /// basename, exactly as `AppState.openProject` derives it. Deliberately
+    /// basename, exactly as `AppState.browseForProject` derives it. Deliberately
     /// not a friendlier label like "Home": a seeded project should be
     /// indistinguishable from one the user added, so nothing about it needs
     /// explaining or un-doing.

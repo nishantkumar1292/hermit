@@ -24,7 +24,7 @@ A file that you open with **Open With**, drop on the Dock icon, or pass to `open
 
 ## Dock menu
 
-Right-click the Macterm Dock icon to see **New Window**, **New Tab**, **New Project…** and **Toggle Quick Terminal**. **New Tab** and **New Project…** first bring a terminal window forward. This includes a window that you closed.
+Right-click the Macterm Dock icon to see **New Window**, **New Tab**, **New Project…** and **Toggle Quick Terminal**. **New Tab** and **New Project…** first bring a terminal window forward. This includes a window that you closed. **New Project…** then opens the [Open Project](/docs/command-palette) screen of the palette.
 
 ## Adaptive icon
 

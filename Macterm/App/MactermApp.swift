@@ -864,6 +864,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The unit-test host must not end a master of the developer's Debug app.
         if ZmxClient.liveBypass != .unitTestHost {
             Task { await SSHConnections.shared.endStaleConnections() }
+            // The Open Project screen's folders, loaded once in the
+            // background so the first ⌘O shows them at once. The unit-test
+            // host reads no real Claude history.
+            ProjectCandidates.prewarm()
         }
         finderServices.attach(appState: appState, projectStore: projectStore)
         // A global chord fired before this point can only toggle the quick

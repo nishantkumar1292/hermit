@@ -222,7 +222,9 @@ extension AppCommand {
             else { return nil }
             return { view.explainOutput() }
         case .openProject:
-            return { _ = ctx.appState.openProject(store: ctx.projectStore) }
+            // The palette's Open Project screen; ⌘O on it, or no window,
+            // opens the system dialog (`AppState.showOpenProject`).
+            return { ctx.appState.showOpenProject(store: ctx.projectStore) }
         case .newRemoteProject:
             return { ctx.appState.isNewRemoteProjectSheetPresented = true }
         case .renameProject:
