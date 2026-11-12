@@ -41,7 +41,7 @@ main() {
   mnt="$(hdiutil attach -nobrowse -readonly -noautoopen "$tmp/Hermit.dmg" | awk -F '\t' '/\/Volumes\// {print $NF}' | tail -1)"
   [[ -n "$mnt" && -d "$mnt/Hermit.app" ]] || die "The download does not contain Hermit.app."
 
-  say "Installing to $dest…"
+  say "Installing to ${dest}…"
   rm -rf "$staged"
   ditto "$mnt/Hermit.app" "$staged" || die "Could not write to /Applications. Is your account an administrator?"
   xattr -dr com.apple.quarantine "$staged" 2>/dev/null || true
