@@ -1,120 +1,206 @@
 <h1 align="center">
-  <img src="./assets/icon.png" width="128" />
+  <img src="./assets/hermit/icon.png" width="128" alt="Hermit's icon: a coral hermit crab whose shell is a terminal window" />
   <br />
-  Macterm
+  Hermit
 </h1>
 
 <p align="center">
-  A feature-rich macOS terminal built to be pleasant, native, and lightweight.
+  <b>A Mac terminal with your projects in a sidebar, each with its own terminals and Claude Code sessions.</b><br />
+  Quit any time: your shells keep running, and every tab comes back when you reopen it.
 </p>
 
 <p align="center">
-  <a href="https://github.com/macterm/macterm/releases/latest">
-    <img src="https://img.shields.io/github/v/release/macterm/macterm?label=version&color=blue" alt="Latest version" />
-  </a>
-  <a href="https://github.com/macterm/macterm/releases">
-    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmacterm%2Fmacterm%2Fbadges%2Fdownloads.json" alt="Total downloads" />
-  </a>
-  <a href="https://github.com/macterm/macterm/actions/workflows/checks.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/macterm/macterm/checks.yml?branch=main&label=checks" alt="CI status" />
-  </a>
-  <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+" />
+  <a href="https://github.com/nishantkumar1292/hermit/releases/latest"><img src="https://img.shields.io/github/v/release/nishantkumar1292/hermit?label=download&color=f2735a" alt="Latest release" /></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14 or later" />
+  <img src="https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-555" alt="Universal app: Apple Silicon and Intel" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
 </p>
 
 <p align="center">
-  <a href="https://macterm.thdxg.dev"><b>Website</b></a> ·
-  <a href="https://macterm.thdxg.dev/docs"><b>Docs</b></a> ·
-  <a href="https://github.com/macterm/macterm/releases"><b>Releases</b></a> ·
-  <a href="https://www.reddit.com/r/macterm"><b>Reddit</b></a>
+  <a href="#install"><b>Install</b></a> ·
+  <a href="#your-first-minute"><b>First minute</b></a> ·
+  <a href="#what-hermit-adds"><b>What Hermit adds</b></a> ·
+  <a href="#everything-else-comes-from-macterm"><b>Features</b></a> ·
+  <a href="#credits"><b>Credits</b></a>
 </p>
 
-![Macterm's vertical project sidebar beside an editor pane and a shell pane](./assets/hero.png)
-
-<p align="center">
-  <a href="https://macterm.thdxg.dev/#features"><b>Watch demos →</b></a>
-</p>
-
-> [!NOTE]
-> This project has no relation to [MacTerm](https://github.com/kmgrant/macterm), an earlier macOS terminal emulator with the same name.
-
-## Features
-
-- **Session persistence**: your shells keep running when you quit, and every pane returns when you start Macterm again.
-- **Vertical project sidebar**: projects and their tabs in a native macOS sidebar.
-- **Splits and multiplexing**: split panes, drag a pane onto another, and move a pane to its own tab.
-- **Remote projects**: open a folder on another machine over SSH. Its shells keep running on that machine.
-- **Pinned tabs**: keep a tab above your projects. It starts with Macterm.
-- **Command palette**: press <kbd>⌘P</kbd> for every command, with its keybind on the row.
-- **Extensions**: add palettes for Git, Docker, Kubernetes, SSH and Claude Code, or write your own in YAML.
-- **Save and restore layouts**: the tabs, splits and commands of a project in one YAML file.
-- **Control CLI**: scripts and coding agents control Macterm with the `macterm` command.
-- **Tab switcher**: hold the recent-tab keybind to pick a tab from live previews.
-- **Copy mode**: move through the scrollback and select text with the keys of Vim or Helix.
-- **Animations**: scrolling, splits and the cursor glide into place.
-- **Quick terminal**: a drop-down terminal over any app, with a global keybind.
-- **Desktop widgets**: a terminal on your desktop, in the grid and shape of the macOS widgets.
-- **Password autofill**: Macterm saves the passwords that you type at a prompt and fills them in again.
-- **Adaptive background**: the window takes the background color of the running program.
-- **Ghostty compatibility**: your Ghostty config, theme, font and keybinds carry over.
+![Hermit with three projects in the sidebar. Each project lists its tabs by what they are doing, such as "Fix the flaky checkout test". The open tab is split into git history, a file list and a dev server.](./assets/hermit/hero.png)
 
 ## Install
 
-### Homebrew
+**One line** (Terminal, or any shell):
 
 ```bash
-brew install --cask macterm/tap/macterm
+curl -fsSL https://raw.githubusercontent.com/nishantkumar1292/hermit/main/scripts/get.sh | bash
 ```
 
-The cask removes the Gatekeeper quarantine attribute when it installs. The app then starts with no extra prompts.
+It downloads the latest release, puts `Hermit.app` in Applications and clears the download flag. Run it again to update. You can [read the script](scripts/get.sh) first: it's about 40 lines.
 
-### From Releases
+<details>
+<summary><b>Or install by hand</b></summary>
 
-Download the latest `.dmg` from [Releases](https://github.com/macterm/macterm/releases). Open it and drag Macterm to Applications. The app has no Apple Developer certificate signature, so clear the quarantine flag one time:
+1. Download **`Hermit.dmg`** from the [latest release](https://github.com/nishantkumar1292/hermit/releases/latest).
+2. Open it and drag **Hermit** to **Applications**.
+3. Hermit isn't notarized by Apple, so clear the download flag once. Without this, macOS says the app "is damaged" or "can't be checked":
 
-```bash
-xattr -cr /Applications/Macterm.app
+   ```bash
+   xattr -cr /Applications/Hermit.app
+   ```
+
+4. Open Hermit from Launchpad or Spotlight.
+
+</details>
+
+| You need | |
+|---|---|
+| macOS | 14 Sonoma or later |
+| Mac | Apple Silicon or Intel (one universal app) |
+| Optional | [Claude Code](https://claude.com/claude-code), for the Open Project suggestions and named tabs |
+
+> [!NOTE]
+> Hermit doesn't update itself yet. To update, run the one-liner again, or download the new `.dmg`. Quit Hermit first: your shells keep running and reattach when it starts again.
+
+## Your first minute
+
+| Do this | Press |
+|---|---|
+| Open a folder as a project | <kbd>⌘</kbd> <kbd>O</kbd> |
+| New terminal in this project | <kbd>⌘</kbd> <kbd>T</kbd> |
+| Split right / split down | <kbd>⌘</kbd> <kbd>D</kbd> / <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>D</kbd> |
+| Every command, searchable | <kbd>⌘</kbd> <kbd>P</kbd> |
+| Next / previous project | <kbd>⌘</kbd> <kbd>]</kbd> / <kbd>⌘</kbd> <kbd>[</kbd> |
+| Rename the tab | <kbd>⌘</kbd> <kbd>R</kbd> |
+| Show or hide the sidebar | <kbd>⌘</kbd> <kbd>\\</kbd> |
+| Drop-down terminal over any app | <kbd>⌃</kbd> <kbd>`</kbd> |
+
+Then run `claude` in a tab. The tab takes the name of the Claude Code session, so the sidebar reads like a to-do list. [More shortcuts](docs/85-shortcuts.md).
+
+## What Hermit adds
+
+Hermit is a fork of [Macterm](https://github.com/macterm/macterm). It keeps everything Macterm does and adds:
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Open Project, without the file dialog
+
+<kbd>⌘</kbd> <kbd>O</kbd> opens a type-ahead list instead of the macOS folder picker:
+
+- **Recent with Claude**: folders where you used Claude Code, ranked by how recently and how often.
+- **Git repos**: projects found in `~/dev` and similar folders.
+- Type a few letters to filter. Type `~/` or `/` to browse folders. <kbd>⌘</kbd> <kbd>O</kbd> again opens Finder.
+
+It reads only folder names and times from Claude Code's history, never your prompts. It never looks in Desktop, Documents or Downloads, so macOS asks for no permissions. Nothing leaves your Mac.
+
+</td>
+<td width="50%" valign="top">
+
+<img src="./assets/hermit/open-project.png" alt="The Open Project list: five recent Claude Code folders with their git branch and last use, then git repositories" />
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### Its own crab
+
+A new icon, so Hermit and Macterm are easy to tell apart in the Dock and the app switcher.
+
+</td>
+<td valign="top">
+
+### Runs beside Macterm
+
+Hermit has its own app ID, settings, `~/.config/hermit` folder and shell sessions. You can use both at once, and neither touches the other's tabs.
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>Tabs named after your Claude Code sessions</b></summary>
+
+When a program sets the terminal title, the sidebar shows it, and Claude Code sets it to the session's title. If your tabs only say `claude`, check your shell config for `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`. To keep that setting in other terminals but not in Hermit, put this in `~/.zshrc`:
+
+```zsh
+# Hermit (and Macterm) set MACTERM_SOCKET in every shell they start.
+if [[ -z $MACTERM_SOCKET ]]; then
+  export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+fi
 ```
 
-After that, Sparkle installs updates. It checks an EdDSA signature on each update. You do not need `xattr` again.
+</details>
 
-## Configuration
+## Everything else comes from Macterm
 
-Macterm reads your Ghostty config from the same places as Ghostty: `~/.config/ghostty/config` or `~/Library/Application Support/com.mitchellh.ghostty/config`. An existing setup carries over with no change. The [Ghostty option reference](https://ghostty.org/docs/config/reference) documents every key. A minimal config looks like this:
+- **Session persistence**: your shells keep running when you quit, and every pane comes back.
+- **Project sidebar**: projects and their tabs in a native macOS sidebar.
+- **Splits**: split panes, drag a pane onto another, or move it to its own tab.
+- **Remote projects**: open a folder on another machine over SSH. Its shells keep running there.
+- **Command palette** (<kbd>⌘</kbd> <kbd>P</kbd>): every command, with its shortcut.
+- **Extensions**: palettes for Git, Docker, Kubernetes, SSH and Claude Code, or your own in YAML.
+- **Layouts**: a project's tabs, splits and commands in one YAML file.
+- **Quick terminal**, **desktop widgets**, **copy mode**, **password autofill** and smooth animations.
+- **Ghostty compatible**: your Ghostty config, theme, font and keybinds carry over.
+
+▶ **[Watch these features in Macterm's demos](https://macterm.thdxg.dev/#features)**. Hermit works the same way.
+
+The [docs](docs/) cover every feature. They're Macterm's docs. In Hermit, read `~/.config/hermit` wherever they say `~/.config/macterm`.
+
+## Configure
+
+Hermit reads your Ghostty config (`~/.config/ghostty/config`), so your theme and font carry over:
 
 ```ini
-theme = Rose Pine
+theme = Catppuccin Mocha
 font-family = JetBrains Mono
-font-size = 16
+font-size = 14
 ```
 
-A few Macterm defaults are different from the Ghostty defaults: theme, font size, padding and `macos-option-as-alt`. Macterm also sets `tab-inherit-working-directory = false`, so new tabs open at the project root. Macterm loads these defaults before your config. A key that you set always wins. `defaultsBody` in [`MactermConfig.swift`](https://github.com/macterm/macterm/blob/main/Macterm/Config/MactermConfig.swift) has the full list.
+For Hermit's own options, open **Hermit → Settings** (<kbd>⌘</kbd> <kbd>,</kbd>). To set a key only in Hermit and not in Ghostty, put it in `~/.config/hermit/config.ghostty`. Hermit reads that file after your Ghostty config, so its keys win.
 
-Macterm has its own settings for window opacity, sidebar behavior, quick terminal size and keymaps. Open them with **Macterm → Settings**. The [configuration docs](https://macterm.thdxg.dev/docs/configuration) give the full order of precedence and the few window keys that Macterm overrides.
+<details>
+<summary><b>Script Hermit from the command line</b></summary>
 
-## Extensions
+The app includes Macterm's `macterm` command. Point it at Hermit's socket, or it may talk to Macterm instead:
 
-An extension streamlines your workflows for Git, Docker, Kubernetes, SSH, coding agents and more. Currently, it adds screens to the command palette ([example](extensions/git/README.md)). More capabilities are planned on the roadmap.
+```bash
+H="/Applications/Hermit.app/Contents/Resources/bin/macterm"
+SOCK="$HOME/Library/Application Support/Hermit/control.sock"
+"$H" status --socket "$SOCK"
+"$H" tab new --run "npm test" --socket "$SOCK"
+```
 
-**To install:** open **Settings → Extensions**, find the extension and click **Install**. Its palettes appear at once in the **Palettes** section of the command palette (<kbd>⌘P</kbd>).
+See [the CLI docs](docs/80-cli.md) for every command.
 
-**To create your own:** make a folder in `~/.config/macterm/extensions/` with an `extension.yaml` file and a `palettes/` folder of YAML files. See the [extension docs](https://macterm.thdxg.dev/docs/extensions) for more detail.
+</details>
 
-**To contribute:** Open a PR to add your extension folder to [`extensions/`](extensions/).
+## Build from source
 
-## Cookbook
+You need macOS 26 or later, Xcode 27 and [mise](https://mise.jdx.dev). The app you build still runs on macOS 14.
 
-The community shares workflows and recipes: layouts, keybinds and scripts that people run with Macterm. For example:
-- [Use one set of <kbd>⌃hjkl</kbd> keybinds to move between Neovim splits and Macterm panes](https://github.com/macterm/macterm/discussions/217)
-- [Drive an interactive program from a script](https://github.com/macterm/macterm/discussions/218)
-- [Give a coding agent control of Macterm](https://github.com/macterm/macterm/discussions/219)
-- [A Neovim plugin that moves focus between Neovim splits and Macterm panes with the same directional keybinds](https://github.com/macterm/macterm/discussions/459)
+```bash
+git clone https://github.com/nishantkumar1292/hermit.git && cd hermit
+mise install && mise run setup          # tools, GhosttyKit and zmx (once per checkout)
+mise exec -- ./scripts/build.sh         # builds build/export/Hermit.app and a .dmg
+./scripts/install.sh                    # copies it to /Applications
+```
 
-Do you have a recipe? [Start a Cookbook topic](https://github.com/macterm/macterm/discussions/new?category=cookbook). Anyone can post a recipe, and anyone can use one.
+[CONTRIBUTING.md](CONTRIBUTING.md) explains the project layout and tests.
 
-## Contributing
+## Uninstall
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, build and pull request rules.
+1. Close your tabs (<kbd>⌘</kbd> <kbd>W</kbd>) to end their shells, then quit Hermit.
+2. Delete `/Applications/Hermit.app`.
+3. Optional: delete `~/.config/hermit` and `~/Library/Application Support/Hermit`.
+
+## Credits
+
+Hermit is built on **[Macterm](https://github.com/macterm/macterm)** by [thdxg](https://github.com/thdxg). Nearly everything here is their work, from the sidebar to session persistence. If you like Hermit, [sponsor Macterm](https://github.com/sponsors/thdxg). Hermit is an independent fork, not affiliated with Macterm.
+
+Why "Hermit"? Hermit crabs move into shells that other animals built. This app moved into Macterm's.
 
 ## License
 
-MIT
+MIT, like Macterm. See [LICENSE](LICENSE).
