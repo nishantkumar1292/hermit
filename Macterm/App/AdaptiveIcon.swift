@@ -196,8 +196,15 @@ enum AdaptiveIcon {
     /// runs (tests, `MACTERM_BENCHMARK=1`) keep the bundled icon, so that no
     /// helper process runs inside a measurement.
     static var isSupported: Bool {
-        systemDrawsGlassIcons && !Preferences.isTestRun && ProcessInfo.processInfo.environment["MACTERM_BENCHMARK"] != "1"
+        bundledIconTakesTheme && systemDrawsGlassIcons && !Preferences.isTestRun
+            && ProcessInfo.processInfo.environment["MACTERM_BENCHMARK"] != "1"
     }
+
+    /// False in Hermit. The repaint fills the layer groups of Macterm's icon
+    /// (characters, glass pane, dark ring, silver frame). Hermit's crab icon
+    /// has other groups, so the Dock always shows the bundled icon, and
+    /// Settings hides the setting.
+    static let bundledIconTakesTheme = false
 
     /// macOS 26 and later. Settings shows the setting only there.
     static var systemDrawsGlassIcons: Bool {

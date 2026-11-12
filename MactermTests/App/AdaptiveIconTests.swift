@@ -96,7 +96,9 @@ struct AdaptiveIconTests {
     /// adaptive icon is the bundled icon, layer by layer. A layer takes its
     /// accent's color or gradient, or else its group's color. A redesign that changes a fill,
     /// a layer or the number of groups fails here until `paint(for:)` follows.
-    @Test
+    /// Hermit bundles a crab icon that the repaint does not use, so this
+    /// test runs only while the bundled icon takes the theme.
+    @Test(.enabled(if: AdaptiveIcon.bundledIconTakesTheme))
     func eyesclosedPaintsTheBundledIconsOwnColors() throws {
         let paint = try #require(AdaptiveIcon.paint(for: Self.eyesclosed))
         let groups = Self.bundled.groups

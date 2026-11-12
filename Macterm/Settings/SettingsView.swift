@@ -1359,7 +1359,7 @@ private struct AppearanceSettings: View {
             }
 
             // The icon is Liquid Glass, which only macOS 26 and later draw.
-            if AdaptiveIcon.systemDrawsGlassIcons {
+            if AdaptiveIcon.bundledIconTakesTheme, AdaptiveIcon.systemDrawsGlassIcons {
                 Section("App Icon") {
                     Toggle(isOn: $preferences.adaptiveIcon) {
                         Text("Adaptive icon")
