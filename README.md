@@ -34,7 +34,7 @@
 curl -fsSL https://raw.githubusercontent.com/nishantkumar1292/hermit/main/scripts/get.sh | bash
 ```
 
-It downloads the latest release, puts `Hermit.app` in Applications and clears the download flag. Run it again to update. You can [read the script](scripts/get.sh) first: it's about 40 lines.
+It downloads the latest release, puts `Hermit.app` in Applications and clears the download flag. Run it again to update. You can [read the script](scripts/get.sh) first: it's about 60 lines.
 
 <details>
 <summary><b>Or install by hand</b></summary>

@@ -178,7 +178,7 @@ mkdir -p "$DMG_STAGING"
 cp -R "$APP_BUNDLE" "$DMG_STAGING/"
 ln -s /Applications "$DMG_STAGING/Applications"
 rm -f "$BUILD_DIR/$DMG_NAME"
-hdiutil create -volname "Macterm" -srcfolder "$DMG_STAGING" -ov -format UDZO "$BUILD_DIR/$DMG_NAME"
+hdiutil create -volname "Hermit" -srcfolder "$DMG_STAGING" -ov -format UDZO "$BUILD_DIR/$DMG_NAME"
 rm -rf "$DMG_STAGING"
 
 echo "Done: build/$DMG_NAME"
