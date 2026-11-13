@@ -451,7 +451,7 @@ struct SidebarContent: View {
                 // Unloaded: the sessions ended (a close, or their own death).
                 // The row stays; selecting it restores from the layout.
                 Label {
-                    FadingText(record.displayTitle)
+                    WrappingTitle(record.displayTitle)
                         .foregroundStyle(.secondary)
                 } icon: {
                     // The pin stays as-is — the row is still pinned, it just
@@ -1299,12 +1299,20 @@ private struct SidebarTabRow: View {
     @ViewBuilder
     private var titleContent: some View {
         if isInteractive, presentation.isRenaming(renameTarget) {
-            TextField(tab.autoTitle, text: $presentation.renameText)
-                .textFieldStyle(.plain)
-                .focused($focused)
-                .onSubmit { commit() }
-                .onExitCommand { cancelRename() }
-                .onAppear { focused = true }
+            ZStack(alignment: .topLeading) {
+                // Holds the row's height while the one-line field is up, so
+                // renaming a two-line row doesn't make the rows below jump.
+                Text(tab.sidebarRowTitle)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .hidden()
+                TextField(tab.autoTitle, text: $presentation.renameText)
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onSubmit { commit() }
+                    .onExitCommand { cancelRename() }
+                    .onAppear { focused = true }
+            }
         } else {
             TabRowTitle(tab: tab)
                 .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
@@ -1470,7 +1478,9 @@ private struct TabRowTitle: View {
                 }
             }
         } else {
-            FadingText(tab.sidebarRowTitle)
+            // A single title wraps onto a second line rather than fading
+            // out: Claude Code's session titles rarely fit on one line.
+            WrappingTitle(tab.sidebarRowTitle)
         }
     }
 }
