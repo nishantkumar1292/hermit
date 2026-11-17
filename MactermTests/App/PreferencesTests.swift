@@ -75,6 +75,17 @@ struct PreferencesTests {
         #expect(Preferences.defaults.object(forKey: Preferences.Keys.showProjectNewTabButton.name) as? Bool == false)
     }
 
+    /// The status column of the tabs is on by default. Read from a fresh
+    /// suite: other suites flip `Preferences.shared` in parallel.
+    @Test
+    func tab_status_indicator_defaults_on() throws {
+        #expect(Preferences.Keys.showTabStatusIndicator.defaultValue)
+        let defaults = try isolatedDefaults()
+        #expect(Preferences.Keys.showTabStatusIndicator.read(defaults))
+        Preferences.Keys.showTabStatusIndicator.write(false, to: defaults)
+        #expect(!Preferences.Keys.showTabStatusIndicator.read(defaults))
+    }
+
     @Test
     func shared_writes_do_not_reach_the_standard_defaults_domain() {
         let sentinel = UUID()

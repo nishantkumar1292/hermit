@@ -332,6 +332,7 @@ final class GhosttyTerminalNSView: NSView {
     /// empty/whitespace clipboard or a remapped Command-V binding.
     func surfaceDidPasteText(_ text: String) {
         PasswordPromptMonitor.shared.viewDidPaste(self, text: text)
+        onInputSent?()
         recordCommandInput(text)
         if TerminalCommandSubmission.textContainsNewline(text),
            TerminalCommandSubmission.textContainsContent(text)
@@ -342,6 +343,13 @@ final class GhosttyTerminalNSView: NSView {
 
     var onFocus: (() -> Void)?
     var onInteraction: (() -> Void)?
+    /// Input went to the pty from the user or from Macterm: a typed key, a
+    /// paste, a drop, `sendText` (`pane run`), `sendKey` (`pane key`) and
+    /// `sendSecret`. Narrower than `onInteraction`, which a click, a scroll
+    /// and a modifier press also fire. The pane clears an open question of
+    /// Claude Code on it (`Pane.awaitingInput`). It does not move session
+    /// leadership: that is `onUserInput`, for typed keys only.
+    var onInputSent: (() -> Void)?
     /// The user typed a key that will reach the pty. Narrower than
     /// `onInteraction` (which also fires for clicks and scrolls): this is the
     /// event zmx hands session leadership on, so `AppState` records the pane
@@ -1257,7 +1265,10 @@ final class GhosttyTerminalNSView: NSView {
         // chords are either app shortcuts or encode to nothing, so they are
         // left out; everything else is close enough to the daemon's own
         // `isUserInput` rule for the leadership record it feeds (#345).
-        if !flags.contains(.command), !isAppShortcut(event) { onUserInput?() }
+        if !flags.contains(.command), !isAppShortcut(event) {
+            onUserInput?()
+            onInputSent?()
+        }
         if TerminalCommandSubmission.clearsInputEvidence(
             keyCode: event.keyCode,
             hasControl: flags.contains(.control),
@@ -2103,6 +2114,7 @@ extension GhosttyTerminalNSView {
         // Same liveness signal a keystroke sends (execution tracking + poll
         // resume), so an injected command updates the tab title promptly.
         onInteraction?()
+        onInputSent?()
         // Text a program reads at a password prompt is the password, whoever
         // typed it — the e2e suite answers prompts this way.
         PasswordPromptMonitor.shared.viewDidSendText(self, text: text)
@@ -2131,6 +2143,7 @@ extension GhosttyTerminalNSView {
     @discardableResult
     func sendSecret(_ secret: String, submit: Bool = true) -> Bool {
         guard let surface, !secret.isEmpty else { return false }
+        onInputSent?()
         secret.withCString { ptr in
             _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
         }
@@ -2199,6 +2212,7 @@ extension GhosttyTerminalNSView {
         // the keyboard does (the e2e suite has no keyboard).
         if copyMode.isActive, copyMode.handle(CopyModeKey(keyCode: keyCode, flags: flags)) { return true }
         onInteraction?()
+        onInputSent?()
         PasswordPromptMonitor.shared.viewDidSendKey(self, keyCode: keyCode, mods: flags)
         if TerminalCommandSubmission.clearsInputEvidence(
             keyCode: keyCode,
@@ -2466,6 +2480,8 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
         if currentKeyEvent != nil {
             keyTextAccumulator.append(text)
         } else if let surface {
+            // Text outside a key event: a drop, dictation, a service.
+            onInputSent?()
             text.withCString { ptr in
                 var ke = ghostty_input_key_s()
                 ke.action = GHOSTTY_ACTION_PRESS

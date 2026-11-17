@@ -1,37 +1,39 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Tab glyph
 
-/// The single decision about what glyph a tab shows, shared by the sidebar row
-/// and the tab switcher's cards (#344) so the two can never disagree about the
-/// user's preferences.
+/// The single decision about what glyph leads a tab, shared by the sidebar
+/// row and the tab switcher's cards (#344) so the two can never disagree about
+/// the user's preferences.
 ///
-/// Four preferences feed it — the chosen tab icon (`tabIconSymbol`, which the
-/// sidebar may override per row), whether a live AI agent's logo replaces it
-/// (`showAgentIcons`), whether a running/done status badge is drawn at all
-/// (`showTabStatusIndicator`), and whether the running spinner also replaces an
-/// agent logo (`showSpinnerOverAgentIcons`, #225). Reading them in one view is
-/// what keeps a second surface from quietly re-deriving three of the four and
-/// drifting: the switcher's first cut hardcoded a terminal symbol and a
-/// spinner, honouring none of them.
+/// It draws identity only: the chosen tab icon (`tabIconSymbol`, which the
+/// sidebar may override per row), or a live AI agent's logo in its place
+/// (`showAgentIcons`). Status never changes it. The state of a tab is in its
+/// status column at the trailing end (`TabStatusAccessory`), so a row of
+/// Claude sessions keeps one logo per row and the column says which one
+/// works, which one waits and which one stopped. Reading the preferences in
+/// one view is what keeps a second surface from quietly re-deriving them and
+/// drifting: the switcher's first cut hardcoded a terminal symbol, honouring
+/// none of them.
 ///
 /// `Preferences.noIcon` means the user asked for no icon, so nothing is drawn
-/// unless there is a live signal to show (a status badge or an agent logo).
-/// In that case it resolves to no view at all rather than an invisible one,
-/// which both callers depend on for layout: the sidebar must not let an empty
-/// image hold the Label's icon column, and the switcher's title has to start
-/// flush with its preview instead of behind a reserved gap.
+/// unless an agent logo is live. In that case it resolves to no view at all
+/// rather than an invisible one, which both callers depend on for layout: the
+/// sidebar must not let an empty image hold the Label's icon column, and the
+/// switcher's title has to start flush with its preview instead of behind a
+/// reserved gap.
 struct TabGlyph: View {
     let tab: TerminalTab
     /// 1-based row number, for the numbered icon variants.
     let index: Int
     /// Per-row override of the icon preference (pinned rows carry their own).
     var symbolOverride: String?
-    /// Color for the symbol and the spinner, and for an agent logo in place of
-    /// its brand color. nil keeps the hierarchical `.secondary` these glyphs
-    /// have always used — which is NOT the same as passing `Color.secondary`,
+    /// Color for the symbol, and for an agent logo in place of its brand
+    /// color. nil keeps the hierarchical `.secondary` these glyphs have
+    /// always used — which is NOT the same as passing `Color.secondary`,
     /// since the hierarchical style resolves against a selected sidebar row's
-    /// own foreground (see `TabStatusGlyph.iconStyle`). The sidebar passes the
+    /// own foreground (see `SidebarTabRow.iconStyle`). The sidebar passes the
     /// project's tag color; the switcher passes its selected/unselected color.
     var tint: Color?
 
@@ -39,10 +41,6 @@ struct TabGlyph: View {
     private var tabIconSymbol: String
     @AppStorage(Preferences.Keys.showAgentIcons)
     private var showAgentIcons: Bool
-    @AppStorage(Preferences.Keys.showTabStatusIndicator)
-    private var showTabStatusIndicator: Bool
-    @AppStorage(Preferences.Keys.showSpinnerOverAgentIcons)
-    private var showSpinnerOverAgentIcons: Bool
 
     private var symbol: String { symbolOverride ?? tabIconSymbol }
     private var agent: AgentIcon? { showAgentIcons ? tab.agentIcon : nil }
@@ -52,121 +50,210 @@ struct TabGlyph: View {
     }
 
     var body: some View {
-        if showTabStatusIndicator, !(symbol == Preferences.noIcon && tab.executionState == .idle && agent == nil) {
-            TabStatusGlyph(
-                state: tab.executionState,
-                failed: tab.completionFailed,
-                symbol: symbol,
-                index: index,
-                agent: agent,
-                tint: tint,
-                spinnerOverAgent: showSpinnerOverAgentIcons
-            )
-        } else if symbol != Preferences.noIcon || agent != nil {
-            // "None" suppresses the user's icon, not the agent logo — that is
-            // a live status signal, so it survives the preference.
+        // "None" suppresses the user's icon, not the agent logo: the logo
+        // says which agent runs, so it survives the preference.
+        if symbol != Preferences.noIcon || agent != nil {
             TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
                 .foregroundStyle(iconStyle)
         }
     }
 }
 
-/// The tab icon with a coexisting status indicator (the maintainer's
-/// suggestion): the user's chosen icon stays put, and status is additive.
+// MARK: - Tab status
+
+extension TabStatus {
+    /// The tooltip and VoiceOver label of the status. Nil for an idle tab,
+    /// whose slot is empty and says nothing.
+    var label: String? {
+        switch self {
+        case .needsYou:
+            String(
+                localized: "Needs You",
+                comment: "Tooltip and VoiceOver label of a tab whose AI agent waits for an answer. A state, not a button"
+            )
+        case .running:
+            String(localized: "Running")
+        case .failed:
+            String(localized: "Failed", comment: "Tooltip of a tab whose command failed")
+        case .done:
+            String(
+                localized: "tab.status.done",
+                defaultValue: "Done",
+                comment: "Tooltip of a tab whose command finished. A state, not a button"
+            )
+        case .idle:
+            nil
+        }
+    }
+}
+
+/// The status glyph of a tab (`TabStatus`), one shape for each state, so no
+/// state depends on color alone:
 ///
-/// - `running`: a small spinner replaces the icon (temporary prominence,
-///   Xcode-build-navigator style) — unless the icon is an AI agent's logo and
-///   the user turned "Show spinner over agent icons" off (#225): agent CLIs
-///   draw their own busy indicator in the tab title, so the logo can stay put.
-/// - `done` (needs attention): the icon with a small solid status dot in the
-///   bottom-trailing corner — like the Messages/FaceTime "available" dot. A
-///   dot reads as "done/positive" without competing with the icon's identity,
-///   and it avoids the heavy, off-platform look of a checkmark glyph badge.
-///   It overlays the agent logo the same way, regardless of the spinner
-///   preference — "unread agent messages" is the signal #225 asked to keep.
-///   The dot is red instead of green when the run reported a failure (an
-///   OSC 9;4 ERROR); nothing else about it changes, and no progress
-///   percentage is ever drawn.
-/// - `idle`: the icon as-is.
-struct TabStatusGlyph: View {
-    let state: TerminalExecutionState
-    /// Whether a `.done` state is a failure (`TerminalTab.completionFailed`).
-    /// Ignored in every other state.
-    var failed = false
-    let symbol: String
-    let index: Int
-    var agent: AgentIcon?
-    /// The project tag's color, nil when untagged — see
-    /// `SidebarTabRow.tagColor`, or the switcher's selection color.
-    var tint: Color?
-    var spinnerOverAgent = true
+/// - Needs You: `questionmark.bubble.fill` in `MactermTheme.warning`. It
+///   bounces one time when it arrives, and not under Reduce Motion.
+/// - Running: AppKit's own spinner (`StatusSpinner`).
+/// - Failed: `xmark.circle.fill` in `MactermTheme.failure`.
+/// - Done (the run ended while the user did not look): a dot in
+///   `MactermTheme.success`.
+/// - Idle: nothing.
+///
+/// The sidebar draws it in the trailing slot of a tab row and in the roll-up
+/// of a collapsed project; the tab switcher draws it at the end of a card's
+/// title row.
+///
+/// Every glyph stays mounted and the status only changes opacities. In a
+/// `List` row, a branch that swaps the view tree tears the row down (see
+/// `SidebarProjectHeader`), and a spinner that came and went would start
+/// again from zero. On a selected row with the accent background, every
+/// glyph draws white (`backgroundProminence == .increased`), as the unread
+/// dot of Mail does.
+///
+/// It takes no hits: a click, a drag or a right-click on the slot is the
+/// row's. Its tooltip is therefore on the row (`TabStatusColumn`).
+struct TabStatusAccessory: View {
+    let status: TabStatus
+
     @AppStorage(Preferences.Keys.sidebarIconSize)
     private var iconSize: SidebarIconSize
+    /// The symbols' point size at the medium icon size. A metric, so the
+    /// glyphs keep tracking the user's text size as the row's icons do.
+    @ScaledMetric(relativeTo: .body)
+    private var symbolPoints: CGFloat = 12
+    @Environment(\.backgroundProminence)
+    private var backgroundProminence
+    @Environment(\.accessibilityReduceMotion)
+    private var reduceMotion
+    /// Counts the arrivals of Needs You. The bounce follows this value and
+    /// not `status`, because a symbol effect plays on every change of its
+    /// value: the departure of Needs You must not bounce the bubble again.
+    @State
+    private var needsYouArrivals = 0
 
-    private var size: SidebarIconSize {
-        iconSize
-    }
+    private var isOnAccent: Bool { backgroundProminence == .increased }
 
-    /// The spinner is a control, so it steps between AppKit's control sizes
-    /// rather than scaling continuously with the icons. `.mini` (12pt) matches
-    /// a small symbol closely; `.regular` is 32pt, far past even a large one,
-    /// so large stays on `.small` and only its frame grows.
-    private var spinnerControlSize: ControlSize {
-        size == .small ? .mini : .small
-    }
-
-    /// The tag when tagged, else the hierarchical `.secondary` these glyphs
-    /// have always used — see `SidebarTabRow.iconStyle` for why a `??` here
-    /// would quietly change every untagged row.
-    private var iconStyle: AnyShapeStyle {
-        tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary)
+    private func color(_ color: Color) -> Color {
+        isOnAccent ? .white : color
     }
 
     var body: some View {
-        switch state {
-        case .running:
-            if let agent, !spinnerOverAgent {
-                TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
-                    .foregroundStyle(iconStyle)
-                    .help("Running")
-            } else {
-                let side = 16 * size.glyphScale
-                ProgressView()
-                    .controlSize(spinnerControlSize)
-                    .tint(tint ?? .secondary)
-                    .help("Running")
-                    .frame(width: side, height: side)
-            }
-        case .done:
-            TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
-                .foregroundStyle(iconStyle)
-                .overlay(alignment: .bottomTrailing) {
-                    // Opaque (not translucent) so it reads clearly over the
-                    // icon and the sidebar background. Nested in a background
-                    // ring so it stays legible over any icon color. Sized off
-                    // the icon so the dot keeps hugging its corner at every
-                    // icon size instead of floating away from a smaller glyph.
-                    Circle()
-                        .fill(.background)
-                        .frame(width: 7 * size.glyphScale, height: 7 * size.glyphScale)
-                        .overlay(
-                            Circle()
-                                .fill(failed ? MactermTheme.failure : MactermTheme.success)
-                                .frame(width: 5 * size.glyphScale, height: 5 * size.glyphScale)
-                        )
-                        .offset(x: 2.5 * size.glyphScale, y: 2.5 * size.glyphScale)
-                }
-                .help(failed
-                    ? String(localized: "Failed", comment: "Tooltip of a tab whose command failed")
-                    : String(
-                        localized: "tab.status.done",
-                        defaultValue: "Done",
-                        comment: "Tooltip of a tab whose command finished. A state, not a button"
-                    ))
-        case .idle:
-            TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
-                .foregroundStyle(iconStyle)
-                .help("Idle")
+        let scale = iconSize.glyphScale
+        ZStack {
+            Image(systemName: "questionmark.bubble.fill")
+                .font(.system(size: symbolPoints * scale))
+                .foregroundStyle(color(MactermTheme.warning))
+                .symbolEffect(.bounce, value: needsYouArrivals)
+                .opacity(status == .needsYou ? 1 : 0)
+            StatusSpinner(
+                isSpinning: status == .running,
+                controlSize: iconSize.statusSpinnerControlSize,
+                isOnAccent: isOnAccent
+            )
+            .frame(width: iconSize.statusSpinnerSide, height: iconSize.statusSpinnerSide)
+            .opacity(status == .running ? 1 : 0)
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: symbolPoints * scale))
+                .foregroundStyle(color(MactermTheme.failure))
+                .opacity(status == .failed ? 1 : 0)
+            Circle()
+                .fill(color(MactermTheme.success))
+                .frame(width: 7 * scale, height: 7 * scale)
+                .opacity(status == .done ? 1 : 0)
+        }
+        .animation(.easeInOut(duration: 0.15), value: status)
+        .onChange(of: status) { old, new in
+            if new == .needsYou, old != .needsYou, !reduceMotion { needsYouArrivals += 1 }
+        }
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(status.label ?? "")
+        .accessibilityHidden(status == .idle)
+    }
+}
+
+extension SidebarIconSize {
+    /// The spinner is a control, so it steps between AppKit's control sizes
+    /// rather than scaling with the icons. `.mini` (10 pt) sits beside the
+    /// 12 pt symbols of the small and medium sizes; `.small` (16 pt) beside
+    /// the large ones. `.regular` is 32 pt, far past every icon size.
+    var statusSpinnerControlSize: NSControl.ControlSize {
+        self == .large ? .small : .mini
+    }
+
+    /// The side of the spinner at `statusSpinnerControlSize`, measured with
+    /// `sizeToFit()`.
+    var statusSpinnerSide: CGFloat {
+        self == .large ? 16 : 10
+    }
+}
+
+/// The Running glyph: AppKit's own spinning `NSProgressIndicator`, started and
+/// stopped by `isSpinning`. Not a SwiftUI `ProgressView`: every row keeps its
+/// spinner mounted at opacity 0, and an `NSProgressIndicator` that is stopped
+/// draws nothing and costs nothing (`isDisplayedWhenStopped = false`). N
+/// running rows are N AppKit spinners; no SwiftUI body runs for each frame.
+///
+/// An `NSProgressIndicator` has no tint. A project's tag color does not reach
+/// it, and on a selected row with the accent background it takes the dark
+/// appearance (`isOnAccent`), which draws it light. It is never redrawn by
+/// hand.
+struct StatusSpinner: NSViewRepresentable {
+    let isSpinning: Bool
+    let controlSize: NSControl.ControlSize
+    let isOnAccent: Bool
+
+    func makeNSView(context _: Context) -> StatusSpinnerView {
+        let view = StatusSpinnerView()
+        view.style = .spinning
+        view.isIndeterminate = true
+        view.isDisplayedWhenStopped = false
+        // The accessory gives one label for the whole slot.
+        view.setAccessibilityElement(false)
+        apply(to: view)
+        return view
+    }
+
+    func updateNSView(_ view: StatusSpinnerView, context _: Context) {
+        apply(to: view)
+    }
+
+    private func apply(to view: StatusSpinnerView) {
+        if view.controlSize != controlSize { view.controlSize = controlSize }
+        let appearance = isOnAccent ? NSAppearance(named: .darkAqua) : nil
+        if view.appearance?.name != appearance?.name { view.appearance = appearance }
+        view.isSpinning = isSpinning
+    }
+}
+
+/// The view of `StatusSpinner`.
+final class StatusSpinnerView: NSProgressIndicator {
+    /// Whether the spinner turns. It turns only while it is in a window.
+    var isSpinning = false {
+        didSet {
+            if isSpinning != oldValue { applySpinning() }
+        }
+    }
+
+    /// Never the target of a click, a drag or a right-click: those belong to
+    /// the sidebar row under it. SwiftUI's `allowsHitTesting(false)` does not
+    /// reach an AppKit view, which AppKit hit-tests itself.
+    override func hitTest(_: NSPoint) -> NSView? {
+        nil
+    }
+
+    /// The outline view reuses row views: a row that scrolls away or folds
+    /// into its project leaves the window and comes back with no SwiftUI
+    /// update, so the spinner starts again here.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applySpinning()
+    }
+
+    private func applySpinning() {
+        if isSpinning, window != nil {
+            startAnimation(nil)
+        } else {
+            stopAnimation(nil)
         }
     }
 }

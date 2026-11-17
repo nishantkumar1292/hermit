@@ -789,4 +789,143 @@ struct PaneTests {
         p.applyRemoteForeground(nil)
         #expect(p.remoteForegroundCommand == "btop --utf-force")
     }
+
+    // MARK: - Needs You (awaitingInput)
+
+    private static let permissionBody = "Claude needs your permission"
+
+    /// A pane with Claude Code in the foreground, before any input: the
+    /// foreground alone does not start a run, so the state stays idle.
+    private func claudePane() -> Pane {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.applyForegroundRefresh(name: "claude", foregroundPID: 4242)
+        return p
+    }
+
+    /// A Claude pane whose question is open.
+    private func waitingClaudePane() -> Pane {
+        let p = claudePane()
+        p.noteDesktopNotification(body: Self.permissionBody)
+        return p
+    }
+
+    @Test
+    func needsYou_is_set_by_claudes_permission_notice() {
+        let p = claudePane()
+        #expect(p.agentIcon == .claude)
+        #expect(!p.awaitingInput)
+        p.noteDesktopNotification(body: "Claude needs your permission to use Bash")
+        #expect(p.awaitingInput)
+    }
+
+    /// The flag is not a state of the tracker: the CLI's `state` stays what
+    /// the tracker says.
+    @Test
+    func needsYou_leaves_the_execution_state_alone() {
+        let p = claudePane()
+        let before = p.executionState
+        p.noteDesktopNotification(body: Self.permissionBody)
+        #expect(p.awaitingInput)
+        #expect(p.executionState == before)
+    }
+
+    /// The 60 s idle notice follows a turn that ended, not a question.
+    @Test
+    func needsYou_ignores_the_idle_notice() {
+        let p = claudePane()
+        p.noteDesktopNotification(body: "Claude is waiting for your input")
+        #expect(!p.awaitingInput)
+    }
+
+    @Test
+    func needsYou_needs_claude_in_the_foreground() {
+        let shell = Pane(projectPath: "/", projectID: UUID())
+        shell.noteDesktopNotification(body: Self.permissionBody)
+        #expect(!shell.awaitingInput)
+
+        let codex = Pane(projectPath: "/", projectID: UUID())
+        codex.applyForegroundRefresh(name: "codex", foregroundPID: 4243)
+        #expect(codex.agentIcon == .codex)
+        codex.noteDesktopNotification(body: Self.permissionBody)
+        #expect(!codex.awaitingInput)
+    }
+
+    /// A mirror parses the same OSC stream as its real pane, so it never sets
+    /// the flag: the real pane does, for both.
+    @Test
+    func needsYou_is_never_set_on_a_mirror() {
+        let mirror = Pane(mirroring: Pane(projectPath: "/", projectID: UUID()))
+        mirror.applyForegroundRefresh(name: "claude", foregroundPID: 4242)
+        #expect(mirror.agentIcon == .claude)
+        mirror.noteDesktopNotification(body: Self.permissionBody)
+        #expect(!mirror.awaitingInput)
+    }
+
+    /// Looking at the tab and clicking the pane are not answers: the
+    /// question is still on the screen.
+    @Test
+    func needsYou_survives_a_click_and_a_look() {
+        let p = waitingClaudePane()
+        p.recordUserInteraction()
+        #expect(p.awaitingInput)
+        p.acknowledgeCommandCompletion()
+        p.acknowledgeBell()
+        #expect(p.awaitingInput)
+
+        let tab = TerminalTab(id: UUID(), splitRoot: .pane(p), focusedPaneID: p.id)
+        tab.acknowledgeCommandCompletion()
+        tab.acknowledgeBell()
+        #expect(p.awaitingInput)
+    }
+
+    /// The view's callbacks: a click (`onInteraction`) keeps the flag, and
+    /// input that reached the pty (`onInputSent`) clears it.
+    @Test
+    func needsYou_clears_on_input_and_not_on_a_click() {
+        let p = waitingClaudePane()
+        let view = GhosttyTerminalNSView(paneID: p.id, workingDirectory: "/tmp", sessionName: "needs-you-test")
+        p.connectViewCallbacks(view)
+
+        view.onInteraction?()
+        #expect(p.awaitingInput)
+        view.onInputSent?()
+        #expect(!p.awaitingInput)
+    }
+
+    /// Claude Code sends OSC 9;4 progress again the moment the user answers.
+    @Test
+    func needsYou_clears_when_a_run_starts() {
+        let p = waitingClaudePane()
+        p.recordUserInteraction()
+        #expect(p.awaitingInput)
+        p.markCommandRunning()
+        #expect(p.executionState == .running)
+        #expect(!p.awaitingInput)
+    }
+
+    @Test
+    func needsYou_clears_when_claude_leaves_the_foreground() {
+        let p = waitingClaudePane()
+        p.applyForegroundRefresh(name: "zsh", foregroundPID: 4300, foregroundIsShell: true)
+        #expect(p.agentIcon == nil)
+        #expect(!p.awaitingInput)
+    }
+
+    @Test
+    func needsYou_clears_when_the_remote_host_reports_another_foreground() {
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        p.applyRemoteForeground(RemoteForeground(comm: "claude", command: "claude"))
+        #expect(p.agentIcon == .claude)
+        p.noteDesktopNotification(body: Self.permissionBody)
+        #expect(p.awaitingInput)
+        p.applyRemoteForeground(RemoteForeground(comm: "-zsh", isIdle: true, isShell: true, command: "-zsh"))
+        #expect(!p.awaitingInput)
+    }
+
+    @Test
+    func needsYou_clears_on_teardown() {
+        let p = waitingClaudePane()
+        p.destroySurface()
+        #expect(!p.awaitingInput)
+    }
 }

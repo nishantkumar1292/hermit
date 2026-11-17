@@ -139,8 +139,53 @@ final class Pane: Identifiable {
     /// The AI coding agent in this pane's foreground (claude, codex, …), for
     /// the sidebar's agent logo. Derived in `applyForegroundRefresh` from the
     /// foreground process's `comm`/argv[0] and cached against the pid, so the
-    /// poll's steady ticks don't re-read argv or churn `@Observable`.
-    private(set) var agentIcon: AgentIcon?
+    /// poll's steady ticks don't re-read argv or churn `@Observable`. The
+    /// remote path (`applyRemoteForeground`) writes it from the host's report.
+    /// When Claude leaves the foreground, its open question goes with it
+    /// (`awaitingInput`).
+    private(set) var agentIcon: AgentIcon? {
+        didSet {
+            if agentIcon != .claude { clearAwaitingInput() }
+        }
+    }
+
+    /// Claude Code in this pane waits for an answer: a permission prompt or a
+    /// question (AskUserQuestion). The status column of the tab shows Needs
+    /// You (`TabStatus.needsYou`), above every other state.
+    ///
+    /// Independent of `executionState`, never a fourth state of it: the
+    /// tracker's guards compare against `.done`, and the CLI's `state` must
+    /// not change. Live only, never persisted.
+    ///
+    /// Set only by `noteDesktopNotification(body:)`. It stays until the answer
+    /// goes in, so looking at the tab, selecting it or clicking the pane does
+    /// not clear it: a click is not an answer, and the question is still on
+    /// the screen. These clear it: a new run (`executionState` becomes
+    /// `.running`, which Claude's OSC 9;4 progress does when the user
+    /// answers), input that reaches the pty (`clearAwaitingInput`, from
+    /// `GhosttyTerminalNSView.onInputSent`), Claude leaving the foreground
+    /// (`agentIcon`), and `destroySurface`.
+    private(set) var awaitingInput = false
+
+    /// Read a desktop notification for an open question of Claude Code
+    /// (`ClaudeCodeNotice`). Sets `awaitingInput` only when the body asks for
+    /// an answer, Claude holds the foreground, and the pane is not a mirror.
+    /// A mirror parses the same OSC stream as its real pane, and the real
+    /// pane records for both. The caller refreshes the foreground first, so a
+    /// notification that comes before the next poll still sees Claude.
+    func noteDesktopNotification(body: String) {
+        guard !isMirror, agentIcon == .claude, ClaudeCodeNotice.asksForAnswer(body: body) else { return }
+        awaitingInput = true
+    }
+
+    /// Input went to the pty: a typed key, a paste, `pane run`, `pane key`.
+    /// That is the answer, so the open question goes. A click or a scroll is
+    /// not input and does not come here (see `awaitingInput`).
+    func clearAwaitingInput() {
+        // Only on a change: an @Observable write invalidates its readers even
+        // when the value stays, and this runs on every key.
+        if awaitingInput { awaitingInput = false }
+    }
 
     /// The foreground pid `agentIcon` was computed for.
     @ObservationIgnored
@@ -217,6 +262,10 @@ final class Pane: Identifiable {
             // the moment the pane leaves `.done` — acknowledged, or a new run
             // started — exactly when the green dot would.
             if oldValue == .done, completionFailed { completionFailed = false }
+            // A new run means that Claude got its answer: Claude Code sends
+            // OSC 9;4 progress again the moment the user answers. The one
+            // place a run starts, so every path that starts one clears it.
+            if executionState == .running { clearAwaitingInput() }
             // A remote pane's OSC title expires when its command ends — the
             // execution edge is the pid-change analogue local panes get from
             // the poll (see `receiveRemoteReportedTitle`). An agent that
@@ -235,14 +284,14 @@ final class Pane: Identifiable {
     }
 
     /// Whether the run that left this pane `.done` reported a failure — an
-    /// OSC 9;4 ERROR (`markProgressFinished(failed:)`) — so its status dot is
-    /// red instead of green. It means something only while `executionState`
-    /// is `.done`: it is set only as the pane lands on `.done`, and cleared
-    /// whenever the state leaves `.done` (`executionState`'s `didSet`), which
-    /// is what makes every acknowledgement path clear red exactly as it
-    /// clears green. A flag rather than a fourth `TerminalExecutionState`,
-    /// because the tracker's guards compare against `.done` and a new case
-    /// would slip past them all.
+    /// OSC 9;4 ERROR (`markProgressFinished(failed:)`) — so its tab shows
+    /// Failed (a red cross, `TabStatus.failed`) instead of the green dot. It
+    /// means something only while `executionState` is `.done`: it is set only
+    /// as the pane lands on `.done`, and cleared whenever the state leaves
+    /// `.done` (`executionState`'s `didSet`), which is what makes every
+    /// acknowledgement path clear red exactly as it clears green. A flag
+    /// rather than a fourth `TerminalExecutionState`, because the tracker's
+    /// guards compare against `.done` and a new case would slip past them all.
     private(set) var completionFailed = false
 
     /// An APC that libghostty did not know (`GhosttyTerminalNSView.onUnknownAPC`).
@@ -959,6 +1008,9 @@ final class Pane: Identifiable {
         // analogue: a final bell-off transition). Before the guard, so a pane
         // torn down before its view ever existed still settles.
         acknowledgeBell()
+        // The program that asked is gone with the surface. Before the guard
+        // for the same reason as the bell.
+        clearAwaitingInput()
         cancelHeldTitle()
         guard let view = _nsView else { return }
         // Null callbacks before destroy so any in-flight ghostty events
@@ -972,6 +1024,7 @@ final class Pane: Identifiable {
         view.onSearchSelected = nil
         view.onFocus = nil
         view.onInteraction = nil
+        view.onInputSent = nil
         view.onCommandSubmitted = nil
         view.onSplitRequest = nil
         view.onOpenLink = nil
