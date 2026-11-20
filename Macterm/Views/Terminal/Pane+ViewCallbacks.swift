@@ -14,6 +14,12 @@ extension Pane {
         view.onInteraction = { [weak self] in
             self?.recordUserInteraction()
         }
+        // Input that reached the pty answers an open question of Claude Code.
+        // Not `onInteraction`: a click and a scroll also fire that one, and a
+        // click is not an answer (see `Pane.awaitingInput`).
+        view.onInputSent = { [weak self] in
+            self?.clearAwaitingInput()
+        }
         // Typed input is what zmx moves leadership on, local or remote. The
         // report carries the pane (see `.terminalUserInput`).
         view.onUserInput = { [weak self] in
@@ -98,6 +104,14 @@ extension Pane {
         }
         view.onDesktopNotification = { [weak self, weak view] title, body in
             guard let self else { return }
+            // Before the early return below: a pane that the user looks at
+            // still waits for its answer, and its tab says so until the
+            // answer goes in. The refresh is for a notification that comes
+            // before the next poll, as `onProgressStarted` does.
+            if ClaudeCodeNotice.asksForAnswer(body: body) {
+                refreshForegroundProcess()
+                noteDesktopNotification(body: body)
+            }
             guard !(NSApp.isActive && view?.isFocused == true) else { return }
             NotificationHandler.shared.post(pane: self, title: title, body: body)
         }

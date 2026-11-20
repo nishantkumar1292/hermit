@@ -138,6 +138,28 @@ Macterm does not take a file type that another kind of app opens: HTML (a browse
 
 Set a color from the sidebar context menu of a project (**Color**) or in **Settings → Projects**. The color tints the sidebar icon of the project and the icons of its tabs. **Settings → Appearance → Auto-assign project colors** (off by default) gives each new project a color by itself.
 
+## Tab status
+
+Each tab row in the sidebar has a status slot at its right end. The icon at the left end shows which tab it is, for example the logo of a coding agent. The slot shows what the tab does:
+
+| Slot | State |
+| --- | --- |
+| Question mark in a bubble | **Needs You.** Claude Code waits for your answer to a permission prompt or a question. |
+| Spinner | **Running.** A command runs, or an agent works. |
+| Cross in a circle | **Failed.** The last run reported an error. |
+| Dot | **Done.** A run ended while you looked at a different tab. |
+| Empty | Nothing new. |
+
+The colors come from the yellow, red and green of your terminal theme. Each state has its own shape, so you can read the slot without the colors.
+
+A tab with split panes shows the pane that is highest in this list. A collapsed project shows the highest status of its tabs at the right end of its row, with a number when two or more tabs have that status. Move the pointer onto the row to see the **+** button again.
+
+**Needs You** comes from the desktop notification that Claude Code sends when it asks. Claude Code stops, and it sends the notification about 6 seconds later. For those seconds the tab shows **Done**, or nothing while you look at it. Needs You stays until you answer. When you look at the tab or click the pane, it does not go away. When you type into the pane or Claude Code starts to work again, it goes away. When Claude Code quits, it also goes away.
+
+The terminal core drops a desktop notification that comes very soon after another one. When two sessions ask at almost the same time, the second tab can show **Done** and not **Needs You**.
+
+Turn the slot off in **Settings → Appearance → Show tab status indicator** (on by default). Macterm still tracks each pane, so `macterm pane list` still reports the state.
+
 ## Animations
 
 Go to **Settings → Animations**. Smooth scrolling, snap to whole row and split animations are on. The cursor effects are off.

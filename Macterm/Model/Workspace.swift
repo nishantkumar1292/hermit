@@ -94,12 +94,21 @@ final class TerminalTab: Identifiable {
     }
 
     /// Whether the tab's `.done` is a failure — some pane's run reported one
-    /// (`Pane.completionFailed`) — which turns its status dot red. A running
+    /// (`Pane.completionFailed`), which `status` shows as Failed. A running
     /// pane outranks it exactly as it outranks done, and it outranks a sibling
     /// pane's success: a split where one pane failed and another passed shows
     /// the failure.
     var completionFailed: Bool {
         executionState == .done && splitRoot.allPanes().contains(where: \.completionFailed)
+    }
+
+    /// What the status column of the tab shows: the highest `TabStatus` of
+    /// its panes, so a split shows the pane that most needs the user. A pane
+    /// whose Claude waits for an answer (`Pane.awaitingInput`) outranks a
+    /// running sibling. Only the column reads this; the CLI's `state` comes
+    /// from `executionState`.
+    var status: TabStatus {
+        splitRoot.allPanes().map { TabStatus(pane: $0) }.max() ?? .idle
     }
 
     var focusedPane: Pane? {

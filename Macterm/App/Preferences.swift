@@ -386,10 +386,14 @@ final class Preferences {
         didSet { Keys.showAgentIcons.write(showAgentIcons, to: defaults) }
     }
 
-    /// Show a status badge over each tab icon: a spinner while a command is
-    /// running (replacing the icon) and a small status dot when a command has
-    /// finished and awaits attention. Off = pure icons. The tracking runs
-    /// either way: `pane list` reports the state (#705).
+    /// Show the status column of each tab (`TabStatusAccessory`): one slot at
+    /// the trailing end of the row with a spinner while it runs, a dot when a
+    /// run ends while the user does not look, a red cross for a failure, and
+    /// a question bubble while Claude Code waits for an answer. A collapsed
+    /// project shows the status of its hidden tabs in the same slot. On by
+    /// default. Off keeps the rows as plain titles, and the slot takes no
+    /// width. The tracking runs either way: `pane list` reports the state
+    /// (#705).
     var showTabStatusIndicator: Bool {
         didSet { Keys.showTabStatusIndicator.write(showTabStatusIndicator, to: defaults) }
     }
@@ -417,16 +421,6 @@ final class Preferences {
     /// the cards the switcher draws; the two are always the same list.
     var recentTabCandidates: Int {
         didSet { Keys.recentTabCandidates.write(recentTabCandidates, to: defaults) }
-    }
-
-    /// Whether the running spinner also replaces an AI agent's logo (#225).
-    /// Off keeps the agent logo while the agent works — agent CLIs draw their
-    /// own busy indicator in the tab title, so the spinner is redundant there —
-    /// while the done dot still appears (it overlays the logo rather than
-    /// replacing it). Meaningful only while `showTabStatusIndicator` and
-    /// `showAgentIcons` are both on.
-    var showSpinnerOverAgentIcons: Bool {
-        didSet { Keys.showSpinnerOverAgentIcons.write(showSpinnerOverAgentIcons, to: defaults) }
     }
 
     /// Give each new project a color tag. Off by default, and consulted at
@@ -1043,7 +1037,6 @@ final class Preferences {
         showTabStatusIndicator = Keys.showTabStatusIndicator.read(defaults)
         showTabSwitcherOverlay = Keys.showTabSwitcherOverlay.read(defaults)
         recentTabCandidates = Keys.recentTabCandidates.read(defaults)
-        showSpinnerOverAgentIcons = Keys.showSpinnerOverAgentIcons.read(defaults)
         autoAssignProjectColors = Keys.autoAssignProjectColors.read(defaults)
         autoUpdateExtensions = Keys.autoUpdateExtensions.read(defaults)
         projectMemory = Keys.projectMemory.read(defaults)
@@ -1161,6 +1154,11 @@ final class Preferences {
         // connections switch is gone, so its key is dead. Removing it again
         // costs nothing, so no flag guards it.
         defaults.removeObject(forKey: "macterm.remote.backgroundSSHConnections")
+        // The status of a tab is in its own column now, and the spinner never
+        // covers the agent logo. The Show spinner over agent icons switch is
+        // gone, so the key `macterm.sidebar.showSpinnerOverAgentIcons` is
+        // retired. Never reuse it.
+        defaults.removeObject(forKey: "macterm.sidebar.showSpinnerOverAgentIcons")
     }
 
     /// Reads the two-layer config preference. The single-path key came from the
@@ -1234,12 +1232,11 @@ final class Preferences {
         static let tabIconSymbol = PreferenceStorageKey("macterm.sidebar.tabIcon", default: "terminal")
         static let sidebarIconSize = PreferenceStorageKey("macterm.sidebar.iconSize", default: SidebarIconSize.medium)
         static let showAgentIcons = PreferenceStorageKey("macterm.sidebar.showAgentIcons", default: true)
-        static let showTabStatusIndicator = PreferenceStorageKey("macterm.sidebar.showTabStatusIndicator", default: false)
+        static let showTabStatusIndicator = PreferenceStorageKey("macterm.sidebar.showTabStatusIndicator", default: true)
         static let showTabSwitcherOverlay = PreferenceStorageKey("macterm.tabSwitcher.overlay", default: true)
         static let recentTabCandidates = PreferenceStorageKey(
             "macterm.tabs.recentTabCandidates", default: unlimitedRecentTabCandidates, normalize: clampRecentTabCandidates
         )
-        static let showSpinnerOverAgentIcons = PreferenceStorageKey("macterm.sidebar.showSpinnerOverAgentIcons", default: true)
         static let autoAssignProjectColors = PreferenceStorageKey("macterm.projects.autoAssignColors", default: false)
         static let autoUpdateExtensions = PreferenceStorageKey("macterm.extensions.autoUpdate", default: true)
         static let projectMemory = PreferenceStorageKey("macterm.memory.enabled", default: false)

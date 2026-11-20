@@ -1271,7 +1271,6 @@ private struct AppearanceSettings: View {
     @State private var sidebarIconSize: String = Preferences.shared.sidebarIconSize.rawValue
     @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
-    @State private var showSpinnerOverAgentIcons: Bool = Preferences.shared.showSpinnerOverAgentIcons
     @State private var autoAssignProjectColors: Bool = Preferences.shared.autoAssignProjectColors
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
@@ -1423,23 +1422,15 @@ private struct AppearanceSettings: View {
 
                 Toggle(isOn: $showTabStatusIndicator) {
                     Text("Show tab status indicator")
-                    Text("Shows a spinner while a command runs. Shows a dot when the command ends.")
-                        .settingsDescription()
+                    Text(String(localized: """
+                    Shows the state of each tab at the end of its row: a spinner while a command runs, \
+                    a dot when it ends. A question mark shows that Claude Code waits for your answer.
+                    """))
+                    .settingsDescription()
                 }
                 .onChange(of: showTabStatusIndicator) { _, v in
                     Preferences.shared.showTabStatusIndicator = v
                 }
-
-                Group {
-                    Toggle(isOn: $showSpinnerOverAgentIcons) {
-                        Text("Show spinner over agent icons").dimsWhenDisabled()
-                    }
-                    .onChange(of: showSpinnerOverAgentIcons) { _, v in
-                        Preferences.shared.showSpinnerOverAgentIcons = v
-                    }
-                }
-                .disabled(!(showTabStatusIndicator && showAgentIcons))
-                .padding(.leading, 16)
 
                 Toggle("Show new project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }

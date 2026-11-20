@@ -258,6 +258,8 @@ private struct TabSwitcherCard: View {
     let number: Int
     let isSelected: Bool
     let paneAspect: CGFloat?
+    @AppStorage(Preferences.Keys.showTabStatusIndicator)
+    private var showTabStatusIndicator: Bool
 
     /// Height of the preview at a comfortably wide pane region. A narrow
     /// (portrait) one grows TALLER instead of the card growing wider than its
@@ -345,13 +347,12 @@ private struct TabSwitcherCard: View {
 
             HStack(spacing: 6) {
                 // The sidebar's own glyph, preferences and all — the chosen
-                // tab icon, the agent logo in its brand color, the running
-                // spinner and the done dot. An earlier cut drew a hardcoded
-                // terminal symbol and its own spinner here, so three of the
-                // four preferences behind it did nothing on these cards.
-                // Deliberately unframed: when the preferences leave nothing
-                // to draw it contributes no view and no spacing, and the
-                // title stays flush with the preview's edge.
+                // tab icon or the agent logo in its brand color. An earlier
+                // cut drew a hardcoded terminal symbol and its own spinner
+                // here, so the preferences behind it did nothing on these
+                // cards. Deliberately unframed: when the preferences leave
+                // nothing to draw it contributes no view and no spacing, and
+                // the title stays flush with the preview's edge.
                 // Tinted with the title, so the whole row brightens on the
                 // selected card rather than a white title beside a dim icon.
                 TabGlyph(
@@ -364,6 +365,12 @@ private struct TabSwitcherCard: View {
                     .foregroundStyle(isSelected ? MactermTheme.fg : MactermTheme.fgMuted)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                // The sidebar's status column, at the end of the title row.
+                // A card is not a List row, so the preference may remove it.
+                if showTabStatusIndicator {
+                    Spacer(minLength: 0)
+                    TabStatusAccessory(status: tab.status)
+                }
             }
             // Inset by the halo so the icon's leading edge lands on the
             // preview's own edge rather than the highlight's.

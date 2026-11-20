@@ -51,6 +51,11 @@ private let projectActionRevealedInset: CGFloat = max(
 /// How the reveal is animated. Matches `PaneDragDrop`'s hover treatment.
 private let projectActionRevealAnimation: Animation = .easeInOut(duration: 0.12)
 
+/// Where a tab row puts its status slot (`TabStatusColumn`): at the trailing
+/// edge, centered on the first line of the title, so a two-line title keeps
+/// the glyph beside its first line and the logo.
+private let tabStatusSlotAlignment = Alignment(horizontal: .trailing, vertical: .firstTextBaseline)
+
 @MainActor
 enum SidebarLayoutMetrics {
     static let topContentMargin: CGFloat = 4
@@ -430,8 +435,9 @@ struct SidebarContent: View {
     /// native insertion line (see `body`), and a row-level destination would
     /// kill it, same as `tabRow` documents.
     private func pinnedRow(record: PinnedTabRecord, index: Int) -> some View {
-        Group {
-            if let tab = appState.pinnedWorkspace?.tabs.first(where: { $0.id == record.id }) {
+        let tab = appState.pinnedWorkspace?.tabs.first(where: { $0.id == record.id })
+        return Group {
+            if let tab {
                 // The shared row with the pin as its fixed icon — pinned rows
                 // have no project section around them, so the pin is what
                 // says which rows these are.
@@ -464,7 +470,9 @@ struct SidebarContent: View {
                 .help("Not running. Select it to restore it from its saved layout.")
             }
         }
-        .padding(.trailing, rowTrailingInset)
+        // An unloaded row has no status, but keeps the column's inset, so its
+        // title wraps at the width of every other row.
+        .modifier(TabStatusColumn(tab: tab))
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .tag(SidebarItem.tab(projectID: PinnedTabs.projectID, tabID: record.id))
@@ -528,7 +536,7 @@ struct SidebarContent: View {
                 }
             }
         } label: {
-            projectHeader(index: projectIndex, project: project)
+            projectHeader(index: projectIndex, project: project, tabs: tabs)
         }
         .id(SidebarItem.project(project.id))
     }
@@ -549,7 +557,7 @@ struct SidebarContent: View {
                 appState.saveWorkspaces()
             }
         )
-        .padding(.trailing, rowTrailingInset)
+        .modifier(TabStatusColumn(tab: tab))
         // Stretch to the full row and make every point hit-testable: without
         // this, the drag grab area hugs the label's intrinsic width instead
         // of covering the whole row.
@@ -571,10 +579,12 @@ struct SidebarContent: View {
         // it on a project header instead. The insertion line won.
     }
 
-    private func projectHeader(index projectIndex: Int, project: Project) -> some View {
+    private func projectHeader(index projectIndex: Int, project: Project, tabs: [TerminalTab]) -> some View {
         SidebarProjectHeader(
             project: project,
             index: projectIndex + 1,
+            tabs: tabs,
+            isExpanded: windowState.expandedProjects.contains(project.id),
             presentation: presentation,
             isInteractive: isInteractive,
             onRename: { appState.renameProject(project.id, to: $0, store: projectStore) },
@@ -1081,10 +1091,22 @@ extension View {
 ///
 /// **The hover state lives here, not on `SidebarContent`.** Held one level up
 /// it was read inside the `List` builder, so a single pointer crossing
-/// invalidated the pinned section, every project, and every tab row.
+/// invalidated the pinned section, every project, and every tab row. The
+/// status of the tabs is read here for the same reason (`statusRollUp`).
+///
+/// **A collapsed project shows the status of its hidden tabs** in the slot of
+/// the "+": the highest `TabStatus` of its tabs, with a count when two or more
+/// tabs share it (`TabStatus.rollUp`). An expanded project shows nothing
+/// there, because its rows show their own. On hover the roll-up fades out and
+/// the "+" fades in, on the same `isRevealed` value. The title yields room to
+/// the roll-up as it does to the "+": a padding number, never a branch.
 private struct SidebarProjectHeader: View {
     let project: Project
     let index: Int
+    /// The project's tabs, for the roll-up. Their status is read in this
+    /// body, not in the `List` builder.
+    let tabs: [TerminalTab]
+    let isExpanded: Bool
     @Bindable
     var presentation: SidebarPresentationState
     let isInteractive: Bool
@@ -1092,8 +1114,13 @@ private struct SidebarProjectHeader: View {
     let onNewTab: () -> Void
     @AppStorage(Preferences.Keys.showProjectNewTabButton)
     private var showProjectNewTabButton: Bool
+    @AppStorage(Preferences.Keys.showTabStatusIndicator)
+    private var showTabStatusIndicator: Bool
     @State
     private var isHovered = false
+    /// The measured width of the roll-up: the count and the slot.
+    @State
+    private var rollUpWidth: CGFloat = projectActionSize
 
     /// Whether the action occupies the row at all. A user who turns the
     /// preference off pays none of its width — which is why this branch is
@@ -1104,6 +1131,24 @@ private struct SidebarProjectHeader: View {
     /// opacity, a hit-test flag — never as a branch in the view tree.
     private var isRevealed: Bool {
         isInteractive && showProjectNewTabButton && isHovered
+    }
+
+    /// What a collapsed project shows for its hidden tabs. Nil while the
+    /// project is expanded, while every tab is idle, or while the status
+    /// indicator is off.
+    private var statusRollUp: TabStatus.RollUp? {
+        guard showTabStatusIndicator, !isExpanded else { return nil }
+        return TabStatus.rollUp(tabs.map(\.status))
+    }
+
+    /// The title's trailing inset: the room of the "+" while it shows, the
+    /// room of the roll-up while that shows, the ordinary inset otherwise.
+    /// The larger one wins, so a hover over a collapsed, busy project moves
+    /// the title only when the roll-up and the "+" differ in width.
+    private var titleTrailingInset: CGFloat {
+        let action = isRevealed ? projectActionRevealedInset : rowTrailingInset
+        guard statusRollUp != nil else { return action }
+        return max(action, rowTrailingInset, projectActionTrailingInset + rollUpWidth + projectActionGap)
     }
 
     var body: some View {
@@ -1130,15 +1175,27 @@ private struct SidebarProjectHeader: View {
         // the ordinary row inset and is laid out precisely as it was before
         // this feature. The title yields 14pt to the pointer and takes it
         // straight back.
-        .padding(.trailing, isRevealed ? projectActionRevealedInset : rowTrailingInset)
+        .padding(.trailing, titleTrailingInset)
+        // The roll-up takes no hits, so its tooltip is on the row under it
+        // (not verified with a pointer). A hover that reveals the "+" hides
+        // the roll-up, and the tooltip with it.
+        .help(isRevealed ? "" : statusRollUp?.status.label ?? "")
         // Overlaid at the trailing edge rather than placed in an `HStack`, so
         // the button's own position is fixed and only the TITLE's inset
         // moves — and applied OUTSIDE the title's inset, which is what puts
         // it at the row's right end instead of a rowTrailingInset gutter's
         // width short of it. Under an idle row it sits, invisible and inert,
         // over the title's last few points, which costs that title nothing:
-        // a zero-opacity overlay takes no space and answers no clicks.
-        .overlay(alignment: .trailing) { newTabButton }
+        // a zero-opacity overlay takes no space and answers no clicks. The
+        // roll-up shares the slot, so its glyph is on the axis of the "+"
+        // and of every tab row's status slot.
+        .overlay(alignment: .trailing) {
+            ZStack(alignment: .trailing) {
+                rollUpView
+                newTabButton
+            }
+            .padding(.trailing, projectActionTrailingInset)
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RowHoverTracker(isHovered: $isHovered))
         .animation(projectActionRevealAnimation, value: isRevealed)
@@ -1159,12 +1216,101 @@ private struct SidebarProjectHeader: View {
         // title — a click meant to select or rename the project — to a button
         // nobody can see.
         .allowsHitTesting(isRevealed)
-        .padding(.trailing, projectActionTrailingInset)
         .help("New Tab")
         // Left reachable by VoiceOver at all times: a pointer-only
         // affordance is no affordance for a keyboard or VoiceOver user, and
         // hit testing and accessibility are separate gates.
         .accessibilityLabel("New Tab in \(project.name)")
+    }
+
+    /// The roll-up: the count, then the glyph in the slot of the "+". Always
+    /// mounted; the values hide it. An empty count takes no width.
+    private var rollUpView: some View {
+        let rollUp = statusRollUp
+        let count = rollUp.map { $0.count >= 2 ? $0.count.formatted() : "" } ?? ""
+        return HStack(spacing: 0) {
+            Text(verbatim: count)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .padding(.trailing, count.isEmpty ? 0 : 2)
+            TabStatusAccessory(status: rollUp?.status ?? .idle)
+                .frame(width: projectActionSize, height: projectActionSize)
+        }
+        .fixedSize()
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rollUpWidth = $0 }
+        .opacity(isRevealed || rollUp == nil ? 0 : 1)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(rollUp?.status.label ?? "")
+        .accessibilityValue(count)
+        .accessibilityHidden(rollUp == nil)
+    }
+}
+
+/// The status column of a tab row: one fixed slot at the row's trailing
+/// edge, on the axis of a project header's hover "+", that shows the tab's
+/// `TabStatus` (`TabStatusAccessory`). The leading icon says which agent or
+/// tab it is; this slot says what it does.
+///
+/// While the status indicator is on, the title's trailing inset is a
+/// constant: `projectActionRevealedInset`, the room a project title yields to
+/// its "+". A state change only changes opacities in the slot, so it never
+/// re-wraps a title or moves a row. While it is off, the slot takes no width:
+/// a preference may restructure the row, a state change may not.
+///
+/// The slot takes no hits (the spinner's AppKit view refuses them as well),
+/// so the row's click to select, drag, right-click menu and drop insertion
+/// line are as they were. The tooltip of the status is on the row
+/// (`TabStatusTooltip`), under the slot, because a view that takes no hits
+/// can get no tooltip. Not verified with a pointer: that the row tooltip
+/// shows over the slot, and that a nearer tooltip (a title that ends in an
+/// ellipsis, "Not running" on an unloaded pinned row) still wins over it.
+private struct TabStatusColumn: ViewModifier {
+    /// Nil for an unloaded pinned row: it shows no status.
+    let tab: TerminalTab?
+    @AppStorage(Preferences.Keys.showTabStatusIndicator)
+    private var showTabStatusIndicator: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, showTabStatusIndicator ? projectActionRevealedInset : rowTrailingInset)
+            .modifier(TabStatusTooltip(tab: tab, isShown: showTabStatusIndicator))
+            .overlay(alignment: tabStatusSlotAlignment) {
+                TabStatusSlot(tab: tab, isShown: showTabStatusIndicator)
+                    .padding(.trailing, projectActionTrailingInset)
+            }
+    }
+}
+
+/// The status as the row's tooltip ("Running", "Needs You"). Its own
+/// modifier, so only it and the slot read `tab.status`. An empty string shows
+/// no tooltip.
+private struct TabStatusTooltip: ViewModifier {
+    let tab: TerminalTab?
+    let isShown: Bool
+
+    func body(content: Content) -> some View {
+        content.help(isShown ? (tab?.status.label ?? "") : "")
+    }
+}
+
+/// The slot of `TabStatusColumn`. Its own view, so a state change re-renders
+/// the slot and not the row: only this body (and `TabStatusTooltip`) reads
+/// `tab.status`.
+private struct TabStatusSlot: View {
+    let tab: TerminalTab?
+    let isShown: Bool
+
+    var body: some View {
+        let status = isShown ? (tab?.status ?? .idle) : .idle
+        // A hidden line of the row's own font is the slot's body: it gives the
+        // slot the height and the first baseline of one title line, so the
+        // glyph centers on the first line of a title that wraps.
+        Text(verbatim: "X")
+            .hidden()
+            .frame(width: projectActionSize)
+            .overlay { TabStatusAccessory(status: status) }
     }
 }
 
@@ -1287,10 +1433,6 @@ private struct SidebarTabRow: View {
     private var tabIconSymbol: String
     @AppStorage(Preferences.Keys.showAgentIcons)
     private var showAgentIcons: Bool
-    @AppStorage(Preferences.Keys.showTabStatusIndicator)
-    private var showTabStatusIndicator: Bool
-    @AppStorage(Preferences.Keys.showSpinnerOverAgentIcons)
-    private var showSpinnerOverAgentIcons: Bool
     @FocusState
     private var focused: Bool
 
@@ -1354,8 +1496,8 @@ private struct SidebarTabRow: View {
                 Label {
                     titleContent
                 } icon: {
-                    // `TabGlyph` draws nothing when "None" leaves no live
-                    // signal to show, which is what this branch needs: an
+                    // `TabGlyph` draws nothing when "None" leaves no agent
+                    // logo to show, which is what this branch needs: an
                     // invisible Image would still reserve the Label's icon
                     // column, nudging the title right of every other
                     // icon-less row.

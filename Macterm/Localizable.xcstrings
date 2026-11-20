@@ -4004,22 +4004,6 @@
         }
       }
     },
-    "Idle" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "유휴"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "空闲"
-          }
-        }
-      }
-    },
     "If it is on, remove Macterm from the list. Then try again." : {
       "localizations" : {
         "ko" : {
@@ -5342,6 +5326,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "名称"
+          }
+        }
+      }
+    },
+    "Needs You" : {
+      "comment" : "Tooltip and VoiceOver label of a tab whose AI agent waits for an answer. A state, not a button",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "응답 필요"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待你的回答"
           }
         }
       }
@@ -9458,22 +9459,6 @@
         }
       }
     },
-    "Show spinner over agent icons" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "에이전트 아이콘 위에 스피너 표시"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在智能体图标上显示旋转指示器"
-          }
-        }
-      }
-    },
     "Show tab previews" : {
       "localizations" : {
         "ko" : {
@@ -9554,18 +9539,18 @@
         }
       }
     },
-    "Shows a spinner while a command runs. Shows a dot when the command ends." : {
+    "Shows the state of each tab at the end of its row: a spinner while a command runs, a dot when it ends. A question mark shows that Claude Code waits for your answer." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "명령이 실행되는 동안 스피너를 표시합니다. 명령이 끝나면 점을 표시합니다."
+            "value" : "각 탭의 상태를 행의 끝에 표시합니다. 명령이 실행되는 동안 스피너를, 명령이 끝나면 점을 표시합니다. 물음표는 Claude Code가 응답을 기다린다는 뜻입니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "命令运行时显示旋转指示器。命令结束时显示圆点。"
+            "value" : "在每个标签页所在行的末尾显示其状态：命令运行时显示旋转指示器，命令结束时显示圆点。问号表示 Claude Code 正在等待你的回答。"
           }
         }
       }
