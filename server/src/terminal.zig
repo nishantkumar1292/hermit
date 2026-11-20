@@ -5,6 +5,33 @@ pub const ghostty_vt = @import("ghostty-vt");
 
 pub const HistoryFormat = util.HistoryFormat;
 
+/// The terminal that a session keeps of its pane. Make every pane terminal
+/// here, so that it counts cell widths as the window's terminal does.
+///
+/// Ghostty turns on grapheme clustering (mode 2027) by default
+/// (`grapheme-width-method = unicode`, in `Termio.init`). libghostty-vt
+/// keeps it off. Without it, this terminal counts some text wider than the
+/// window: a Devanagari conjunct such as र्मा (3 cells, the window 2), a flag
+/// (4, the window 2), a ZWJ emoji (11, the window 2). It also drops the VS16
+/// of a keycap. A snapshot then puts the text after such a cluster in other
+/// columns than the window showed. A program that draws with absolute cursor
+/// moves (Claude Code) then comes back garbled after each attach.
+///
+/// A program that sets or resets the mode does so here too, because this
+/// terminal reads the same output. The app does not send a user's
+/// `grapheme-width-method = legacy`: with it, this terminal and the window
+/// count conjuncts and emoji differently again.
+pub fn initPaneTerminal(io: std.Io, gpa: std.mem.Allocator, cols: u16, rows: u16, max_scrollback_lines: usize) !ghostty_vt.Terminal {
+    return ghostty_vt.Terminal.init(io, gpa, .{
+        .cols = cols,
+        .rows = rows,
+        .max_scrollback_lines = max_scrollback_lines,
+        // The line limit controls the scrollback.
+        .max_scrollback_bytes = null,
+        .default_modes = .{ .grapheme_cluster = true },
+    });
+}
+
 /// True when a CSI carries a private marker (`?`, `>`, `=`, `<`). Keyboard
 /// encodings never use one, but the replies a terminal sends on its own do:
 /// kitty keyboard flags (`CSI ? flags u`), DA1 (`CSI ? 62;22 c`), DA2
@@ -1284,4 +1311,65 @@ test "serializeTerminalState keeps a soft-wrapped line on the visible screen who
     const screen = try wide.plainString(alloc);
     defer alloc.free(screen);
     try testing.expect(std.mem.indexOf(u8, screen, "abcdefghijklmnopqrstuvwxy\n") != null);
+}
+
+/// A terminal set up as Ghostty sets up the window's: grapheme clustering on.
+fn testWindowTerminal(alloc: std.mem.Allocator, io: std.Io, cols: u16, rows: u16) !ghostty_vt.Terminal {
+    return ghostty_vt.Terminal.init(io, alloc, .{
+        .cols = cols,
+        .rows = rows,
+        .max_scrollback_lines = 2_000,
+        .default_modes = .{ .grapheme_cluster = true },
+    });
+}
+
+fn expectCodepointAt(term: *ghostty_vt.Terminal, x: usize, y: usize, cp: u21) !void {
+    const pin = term.screens.active.pages.pin(.{ .active = .{ .x = @intCast(x), .y = @intCast(y) } }) orelse
+        return error.TestUnexpectedNull;
+    try testing.expectEqual(cp, pin.rowAndCell().cell.codepoint());
+}
+
+test "a snapshot puts the text after a conjunct or an emoji in the columns that the window showed" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    // Each row has a cluster that a terminal without grapheme clustering
+    // counts wider than the window does. Then a program puts a mark at
+    // column 20 with an absolute cursor move, as Claude Code draws.
+    const output = "\x1b[1;1H\u{930}\u{94D}\u{92E}\u{93E}\x1b[20G|" ++ // र्मा, a Devanagari conjunct
+        "\x1b[2;1H\u{1F1EF}\u{1F1F5}\x1b[20G|" ++ // a flag
+        "\x1b[3;1H\u{1F469}\u{1F3FD}\u{200D}\u{2764}\u{FE0F}\u{200D}\u{1F48B}\u{200D}\u{1F468}\u{1F3FF}\x1b[20G|" ++ // a ZWJ emoji
+        "\x1b[4;1H1\u{FE0F}\u{20E3}\x1b[20G|" ++ // a keycap
+        "\x1b[5;1H";
+
+    var window = try testWindowTerminal(alloc, io, 40, 8);
+    defer window.deinit(alloc);
+    {
+        var stream = window.vtStream();
+        defer stream.deinit();
+        stream.nextSlice(output);
+    }
+
+    var pane = try initPaneTerminal(io, alloc, 40, 8, 2_000);
+    defer pane.deinit(alloc);
+    {
+        var stream = pane.vtStream();
+        defer stream.deinit();
+        stream.nextSlice(output);
+    }
+
+    // A client that attaches gets the pane terminal's snapshot.
+    const snapshot = serializeTerminalState(alloc, &pane) orelse return error.TestUnexpectedNull;
+    defer alloc.free(snapshot);
+    var replayed = try testWindowTerminal(alloc, io, 40, 8);
+    defer replayed.deinit(alloc);
+    {
+        var stream = replayed.vtStream();
+        defer stream.deinit();
+        stream.nextSlice(snapshot);
+    }
+
+    try expectScreensMatch(alloc, &window, &replayed);
+    for (0..4) |y| try expectCodepointAt(&replayed, 19, y, '|');
+    try expectCursorAt(&replayed, 4, 0);
 }
