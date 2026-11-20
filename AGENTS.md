@@ -1270,6 +1270,11 @@ The GUI text is in three String Catalogs: `Macterm/Localizable.xcstrings` (the a
 - **Never add a `Co-Authored-By: Claude` trailer or any AI sign-off.**
 - Subject lines say why. Split independent changes into separate commits.
 - **PRs merge by squash only**. The PR title is the squash subject. If there is a conflict, merge `main` into the branch. Never rebase.
+- **Ship each change that the user asks for as a PR to `main` on `origin` (`nishantkumar1292/hermit`), and squash-merge it yourself.** Do not wait for an approval. Do not leave the work as a commit on a local branch only.
+  - Make one PR for each independent change, from a branch that you cut from `origin/main`.
+  - After the merge, move the local `hermit` branch to `origin/main` and delete the local PR branch.
+  - The local `main` tracks upstream (`macterm/macterm`), not this fork. Do not push it to `origin`.
+  - A build or an install of the app is a separate request. Merge does not include it.
 - Edit `AGENTS.md`. `CLAUDE.md` is a symlink to it.
 
 ### UI principles
