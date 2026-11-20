@@ -257,12 +257,7 @@ pub fn clientLoop(client_sock_fd: i32, foreground_events: bool) !ClientResult {
 }
 
 fn initTerminal(gpa: std.mem.Allocator, io: std.Io, size: ipc.Resize, cfg: *const Cfg) !ghostty_vt.Terminal {
-    return ghostty_vt.Terminal.init(io, gpa, .{
-        .cols = size.cols,
-        .rows = size.rows,
-        .max_scrollback_lines = cfg.max_scrollback_lines,
-        .max_scrollback_bytes = null, // Let the line limit control scrollback.
-    });
+    return terminal.initPaneTerminal(io, gpa, size.cols, size.rows, cfg.max_scrollback_lines);
 }
 
 /// dameonLoop is what the daemon runs to send and receive ipc commands from its corresponding

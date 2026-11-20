@@ -363,12 +363,7 @@ const Session = struct {
             .pty_name_buf = pty.name_buf,
             .epoch = epoch,
             .size = opts.size,
-            .watch = .init(gpa, try ghostty_vt.Terminal.init(io, gpa, .{
-                .cols = opts.size.cols,
-                .rows = opts.size.rows,
-                .max_scrollback_lines = opts.max_scrollback_lines,
-                .max_scrollback_bytes = null,
-            })),
+            .watch = .init(gpa, try terminal.initPaneTerminal(io, gpa, opts.size.cols, opts.size.rows, opts.max_scrollback_lines)),
         };
         s.pty_name = std.mem.sliceTo(&s.pty_name_buf, 0);
         return s;
