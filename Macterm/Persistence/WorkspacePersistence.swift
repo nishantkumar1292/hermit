@@ -198,9 +198,10 @@ struct PaneSnapshot: Codable {
     /// name embeds the project slug at creation time, so re-deriving it after
     /// a project rename would target a session that doesn't exist.
     var sessionName: String?
-    /// The pane's live working directory at snapshot time, so a session that
-    /// did NOT survive (reboot, external kill) respawns where the user was.
-    /// A surviving session reattaches with its own live cwd regardless.
+    /// The pane's live working directory at snapshot time, so a pane that
+    /// restores without a session-liveness check (server unavailable or zmx
+    /// bypassed) lands where the user was. A surviving session connects again
+    /// with its own live cwd regardless.
     var workingDirectory: String?
     /// A REMOTE pane's host folder, once its session ran on the host's
     /// server (`Pane.hostSessionDirectory`, 0057): the shell's own folder at
@@ -451,13 +452,87 @@ enum WorkspaceSerializer {
         }
     }
 
-    static func restore(from snapshots: [WorkspaceSnapshot], validIDs: Set<UUID>) -> [Workspace] {
+    static func restore(
+        from snapshots: [WorkspaceSnapshot],
+        validIDs: Set<UUID>,
+        aliveLocalSessions: Set<String>? = nil
+    ) -> [Workspace] {
         snapshots.compactMap { snap in
             guard validIDs.contains(snap.projectID) else { return nil }
-            // An empty workspace restores empty: the user closed every tab.
+            // An empty workspace restores empty: the user closed every tab, or
+            // every local session ended (for example, after a Mac restart).
             // Dropping it would make the next selection create a default tab.
-            let tabs = snap.tabs.map { restoreTab($0, projectID: snap.projectID) }
+            let tabs = snap.tabs.compactMap { tabSnapshot -> TerminalTab? in
+                guard let pruned = pruningDeadLocalPanes(
+                    in: tabSnapshot,
+                    aliveLocalSessions: aliveLocalSessions
+                )
+                else { return nil }
+                return restoreTab(pruned, projectID: snap.projectID)
+            }
             return Workspace(projectID: snap.projectID, tabs: tabs, activeTabID: snap.activeTabID)
+        }
+    }
+
+    /// Keep only panes whose session can still connect: every remote pane
+    /// (remote sessions stay running on their host across a Mac restart) and
+    /// every local pane whose `sessionName` is in `aliveLocalSessions`. A split
+    /// whose one side ended collapses to the side that kept running; a split
+    /// whose both sides ended returns nil. When `aliveLocalSessions` is nil
+    /// (the local server did not answer, or zmx is not active), fail closed and
+    /// return `node` unchanged.
+    static func pruningDeadLocalPanes(
+        in node: SplitNodeSnapshot,
+        aliveLocalSessions: Set<String>?
+    ) -> SplitNodeSnapshot? {
+        guard let aliveLocalSessions else { return node }
+        switch node {
+        case let .pane(pane):
+            if ProjectPath.isRemote(pane.projectPath) { return .pane(pane) }
+            guard let name = pane.sessionName, aliveLocalSessions.contains(name) else { return nil }
+            return .pane(pane)
+        case let .split(branch):
+            let first = pruningDeadLocalPanes(in: branch.first, aliveLocalSessions: aliveLocalSessions)
+            let second = pruningDeadLocalPanes(in: branch.second, aliveLocalSessions: aliveLocalSessions)
+            switch (first, second) {
+            case let (.some(first), .some(second)):
+                return .split(SplitBranchSnapshot(
+                    direction: branch.direction,
+                    ratio: branch.ratio,
+                    first: first,
+                    second: second
+                ))
+            case let (.some(survivor), .none),
+                 let (.none, .some(survivor)):
+                return survivor
+            case (.none, .none):
+                return nil
+            }
+        }
+    }
+
+    /// Prune dead local panes from a tab snapshot. Returns nil when every pane
+    /// in the tab ended.
+    static func pruningDeadLocalPanes(
+        in tab: TabSnapshot,
+        aliveLocalSessions: Set<String>?
+    ) -> TabSnapshot? {
+        guard let root = pruningDeadLocalPanes(in: tab.splitRoot, aliveLocalSessions: aliveLocalSessions) else {
+            return nil
+        }
+        return TabSnapshot(
+            id: tab.id,
+            customTitle: tab.customTitle,
+            focusedPaneID: tab.focusedPaneID,
+            splitRoot: root
+        )
+    }
+
+    /// Every leaf pane in `node`, in tree order.
+    static func paneSnapshots(in node: SplitNodeSnapshot) -> [PaneSnapshot] {
+        switch node {
+        case let .pane(pane): [pane]
+        case let .split(branch): paneSnapshots(in: branch.first) + paneSnapshots(in: branch.second)
         }
     }
 

@@ -115,6 +115,18 @@ final class AppState {
     /// can also register after; see `windowAdoptedBeforeRegistration`.
     private var savedWindowSnapshots: [WindowSnapshot] = []
 
+    /// Projects whose restored tabs were all closed at launch because their
+    /// local sessions ended (for example, after a Mac restart). Cleared from
+    /// each restored window's `expandedProjects` so empty projects do not show
+    /// open disclosure arrows over zero rows.
+    @ObservationIgnored
+    private var prunedEmptyProjectIDs: Set<UUID> = []
+
+    /// True when `restoreSelection` closed at least one dead local pane, so
+    /// `restoreWindows` writes the cleaned snapshot once the windows are back.
+    @ObservationIgnored
+    private var didPruneDeadSessionsAtLaunch = false
+
     /// The scene's own window, when `restoreWindows` adopted the first saved
     /// entry before that window attached and registered. The launch task can
     /// run first. `registerWindow` then found no pending entry after the
@@ -186,14 +198,20 @@ final class AppState {
         // app knows which project to show — the window registered before that
         // and so still has none.
         if first.activeProjectID == nil { first.activeProjectID = activeProjectID }
-        guard !saved.isEmpty else { return }
-        first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
+        guard !saved.isEmpty else {
+            first.expandedProjects.subtract(prunedEmptyProjectIDs)
+            finishDeadSessionLaunchPrune(persist: true)
+            return
+        }
+        first.activeProjectID = restorableProjectID(saved[0].activeProjectID) ?? first.activeProjectID
         if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
         if let visible = saved[0].sidebarVisible { first.sidebarVisible = visible }
         adoptPanelVisibility(from: saved[0])
         // After the project: making a project active opens its section, and
-        // the saved set must win over that.
+        // the saved set must win over that. Projects whose dead sessions were
+        // all closed at launch stay collapsed.
         if let expanded = saved[0].expandedProjectIDs { first.expandedProjects = Set(expanded) }
+        first.expandedProjects.subtract(prunedEmptyProjectIDs)
         if let frame = saved[0].frame {
             first.frame = frame
             applyRestoredFrame(of: first)
@@ -203,7 +221,10 @@ final class AppState {
             activeProjectID = first.activeProjectID
             alignKeyWindowTab()
         }
-        guard saved.count > 1 else { return }
+        guard saved.count > 1 else {
+            finishDeadSessionLaunchPrune(persist: true)
+            return
+        }
         pendingKeyWindowIndex = saved.firstIndex { $0.isKey == true }
         pendingWindowRestores = Array(saved.dropFirst())
         logger.info("restoreWindows: reopening \(saved.count - 1, privacy: .public) extra window(s)")
@@ -229,7 +250,25 @@ final class AppState {
             )
             pendingWindowRestores = []
             pendingKeyWindowIndex = nil
+            finishDeadSessionLaunchPrune(persist: true)
         }
+    }
+
+    /// Clear the launch-only dead-session prune state once restored windows
+    /// have adopted it. When `persist` is true and at least one dead session
+    /// was closed, schedule a debounced save so the cleaned state reaches disk.
+    private func finishDeadSessionLaunchPrune(persist: Bool) {
+        prunedEmptyProjectIDs = []
+        let shouldPersist = persist && didPruneDeadSessionsAtLaunch
+        didPruneDeadSessionsAtLaunch = false
+        if shouldPersist { persistWindows() }
+    }
+
+    /// Filter out the scratch workspace when every scratch tab ended at launch,
+    /// so a restored window does not land on an empty synthetic workspace.
+    private func restorableProjectID(_ id: UUID?) -> UUID? {
+        if id == ScratchTabs.projectID, !hasScratchTabs { return nil }
+        return id
     }
 
     /// Spacing between restored window opens (see `restoreWindows`).
@@ -380,6 +419,7 @@ final class AppState {
     /// nothing and maintained by nothing — see `selectedTab(for:in:)`.
     private func recordRestoredTab(_ tabID: UUID?, in window: WindowState) {
         guard let project = window.activeProjectID, project != PinnedTabs.projectID, let tabID else { return }
+        if let ws = workspaces[project], !ws.tabs.contains(where: { $0.id == tabID }) { return }
         window.activeTabIDs[project] = tabID
     }
 
@@ -394,7 +434,7 @@ final class AppState {
             // after it is asked for (its NSWindow has to attach first), which
             // is why the request cannot hand it a payload directly.
             let restoring = pendingWindowRestores.removeFirst()
-            if let project = restoring.activeProjectID {
+            if let project = restorableProjectID(restoring.activeProjectID) {
                 window.activeProjectID = project
                 recordRestoredTab(restoring.activeTabID, in: window)
             }
@@ -402,7 +442,12 @@ final class AppState {
             if let visible = restoring.sidebarVisible { window.sidebarVisible = visible }
             adoptPanelVisibility(from: restoring)
             if let expanded = restoring.expandedProjectIDs { window.expandedProjects = Set(expanded) }
+            window.expandedProjects.subtract(prunedEmptyProjectIDs)
             if let frame = restoring.frame { window.frame = frame }
+            if pendingWindowRestores.isEmpty {
+                // `registerWindow` persists below, so clear without a second save.
+                finishDeadSessionLaunchPrune(persist: false)
+            }
         } else if hasRestoredWindows {
             // A window the user opened, not one being restored: the sidebar
             // comes up at the app's defaults — shown, at the default width.
@@ -1733,7 +1778,17 @@ final class AppState {
 
     // MARK: - Restore / Save
 
-    func restoreSelection(projects: [Project]) {
+    /// The names of local v2 sessions currently running on the local server, or
+    /// nil when zmx is not bundled, bypassed (unit-test host or socket-path
+    /// limit), or the server did not answer. Nil means unknown: callers fail
+    /// closed and keep all restored tabs.
+    func liveLocalSessionNames() async -> Set<String>? {
+        guard zmx.isBundled() else { return nil }
+        guard let sessions = await zmx.listSessions() else { return nil }
+        return Set(sessions.filter(\.isRunning).map(\.name))
+    }
+
+    func restoreSelection(projects: [Project], aliveLocalSessions: Set<String>? = nil) {
         logger.info("restoreSelection: \(projects.count, privacy: .public) projects")
         hasRestoredSelection = true
         let loaded = workspaceStore.load()
@@ -1741,14 +1796,39 @@ final class AppState {
         // record is the snapshot, and its sessions must be claims before the
         // orphan sweep below.
         let valid = Set(projects.map(\.id)).union([ScratchTabs.projectID])
+        let v1SnapshotNames = snapshotLocalSessionNames(from: loaded, validIDs: valid)
         // Restore every project's snapshot — including layout-file projects.
         // The snapshot carries each pane's persisted zmx session identity, so
-        // panes REATTACH their still-running shells; applying the project
+        // panes connect again to their running shells; applying the project
         // file's declared layout here would silently destroy them on every
         // launch. A declared layout is only ever applied by an explicit Apply
         // Layout; a project with no snapshot gets the default workspace.
-        for ws in WorkspaceSerializer.restore(from: loaded.workspaces, validIDs: valid) {
+        //
+        // When `aliveLocalSessions` is known, close local panes whose sessions
+        // ended (for example, after a Mac restart) instead of letting
+        // `zmx connect` start fresh empty shells. Each project keeps an empty
+        // workspace so it stays in the sidebar and selecting it does not create
+        // a default shell. Remote panes stay because their sessions run on the
+        // host.
+        for ws in WorkspaceSerializer.restore(
+            from: loaded.workspaces,
+            validIDs: valid,
+            aliveLocalSessions: aliveLocalSessions
+        ) {
             workspaces[ws.projectID] = ws
+        }
+        var prunedEmpty: Set<UUID> = []
+        var prunedAny = false
+        if aliveLocalSessions != nil {
+            for snap in loaded.workspaces where valid.contains(snap.projectID) {
+                let beforePanes = snap.tabs.reduce(0) { $0 + WorkspaceSerializer.paneSnapshots(in: $1.splitRoot).count }
+                let afterTabs = workspaces[snap.projectID]?.tabs ?? []
+                let afterPanes = afterTabs.reduce(0) { $0 + $1.splitRoot.allPanes().count }
+                if afterPanes < beforePanes {
+                    prunedAny = true
+                    if afterTabs.isEmpty { prunedEmpty.insert(snap.projectID) }
+                }
+            }
         }
         // Pinned tabs: records first, then the launch reconcile against
         // `pinned.yaml` (the file is authoritative for membership — see
@@ -1757,9 +1837,31 @@ final class AppState {
         savedWindowSnapshots = loaded.windows
         restorePinnedState(loaded.pinned, activeTabID: loaded.pinnedActiveTabID)
         reconcilePinnedLayoutAtLaunch(projects: projects)
-        // The quick terminal's tab reattaches like any workspace tab. Before
-        // the orphan sweep below, which spares only what a pane claims.
-        restoreQuickTerminal(loaded.quickTerminal)
+        // The quick terminal's tab connects again like any workspace tab. Drop
+        // dead local panes when liveness is known; if every pane ended, leave
+        // the fresh single-pane tab the panel starts with. Before the orphan
+        // sweep below, which spares only what a pane claims.
+        let restoredQuickTerminal: TabSnapshot?
+        if let savedQuick = loaded.quickTerminal {
+            let prunedQuick = WorkspaceSerializer.pruningDeadLocalPanes(
+                in: savedQuick,
+                aliveLocalSessions: aliveLocalSessions
+            )
+            let beforeQuick = WorkspaceSerializer.paneSnapshots(in: savedQuick.splitRoot).count
+            let afterQuick = prunedQuick.map { WorkspaceSerializer.paneSnapshots(in: $0.splitRoot).count } ?? 0
+            if afterQuick < beforeQuick { prunedAny = true }
+            restoredQuickTerminal = prunedQuick
+        } else {
+            restoredQuickTerminal = nil
+        }
+        restoreQuickTerminal(restoredQuickTerminal)
+        prunedEmptyProjectIDs = prunedEmpty
+        didPruneDeadSessionsAtLaunch = prunedAny
+        if prunedAny {
+            logger.info(
+                "restoreSelection: closed dead local sessions (\(prunedEmpty.count, privacy: .public) project(s) now empty)"
+            )
+        }
         // Widgets too: their sessions must be claimed before the sweep, and
         // `widgets.yaml` decides which exist before either.
         let restoredWidgets = restoreDesktopWidgets(loaded.desktopWidgets)
@@ -1797,8 +1899,32 @@ final class AppState {
         // A failed snapshot LOAD gives no names: nothing is ended (an empty
         // claim set would mark every live session an orphan).
         guard !workspaceStore.loadFailed else { return }
-        endV1SessionsOnce(names: localSessionNames())
+        endV1SessionsOnce(names: localSessionNames().union(v1SnapshotNames))
         sweepLocalOrphans()
+    }
+
+    /// Local session names recorded in the loaded snapshot before dead-session
+    /// pruning, so a first v2 launch still ends legacy v1 daemons even after
+    /// their tabs close.
+    private func snapshotLocalSessionNames(from loaded: WorkspaceStore.Loaded, validIDs: Set<UUID>) -> Set<String> {
+        var names: Set<String> = []
+        for ws in loaded.workspaces where validIDs.contains(ws.projectID) {
+            for tab in ws.tabs {
+                for pane in WorkspaceSerializer.paneSnapshots(in: tab.splitRoot)
+                    where !ProjectPath.isRemote(pane.projectPath)
+                {
+                    if let name = pane.sessionName { names.insert(name) }
+                }
+            }
+        }
+        if let quick = loaded.quickTerminal {
+            for pane in WorkspaceSerializer.paneSnapshots(in: quick.splitRoot)
+                where !ProjectPath.isRemote(pane.projectPath)
+            {
+                if let name = pane.sessionName { names.insert(name) }
+            }
+        }
+        return names
     }
 
     func saveWorkspaces() {
@@ -2675,10 +2801,14 @@ final class AppState {
         focus: Bool = true
     ) -> UUID? {
         guard let ws = workspaces[projectID] else { return nil }
+        let wasEmpty = ws.tabs.isEmpty
         let tab = ws.createTab(
             projectPath: projectPath, sessionSlug: sessionSlug, remoteZmxPath: remoteZmxPath,
             command: command, env: env, focus: focus
         )
+        if wasEmpty, !Project.isSynthetic(projectID) {
+            keyOrFirstWindow?.expandedProjects.insert(projectID)
+        }
         if !focus {
             for pane in tab.splitRoot.allPanes() {
                 warmIfUnrendered(pane, in: tab)

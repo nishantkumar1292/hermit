@@ -2867,6 +2867,240 @@ struct AppStateTests {
         #expect(calls.value == 1)
         #expect(!endedFlag.value)
     }
+
+    // MARK: - Dead local sessions at launch
+
+    @Test
+    func liveLocalSessionNames_returns_running_names_or_nil_when_unknown() async {
+        let state = makeAppState()
+
+        // Unbundled / noop client → nil (unknown).
+        state.zmx = .noop
+        #expect(await state.liveLocalSessionNames() == nil)
+
+        // Bundled but listing failed → nil (fail closed).
+        var failing = ZmxClient.noop
+        failing.isBundled = { true }
+        failing.listSessions = { nil }
+        state.zmx = failing
+        #expect(await state.liveLocalSessionNames() == nil)
+
+        // Bundled and server answered → only running sessions count.
+        var listing = ZmxClient.noop
+        listing.isBundled = { true }
+        listing.listSessions = {
+            [
+                LocalSession(name: "macterm-a-111111111111", isRunning: true),
+                LocalSession(name: "macterm-b-222222222222", isRunning: false),
+            ]
+        }
+        state.zmx = listing
+        #expect(await state.liveLocalSessionNames() == ["macterm-a-111111111111"])
+    }
+
+    @Test
+    func launch_after_reboot_closes_dead_local_tabs_keeps_projects_and_collapses_empty_sections() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-reboot-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let files = makeProjectFileStore()
+
+        let localA = Project(name: "branch", path: dir.path, sortOrder: 0)
+        let localB = Project(name: "hermit", path: dir.path, sortOrder: 1)
+        let remote = Project(name: "prod", path: "devbox:~/app", sortOrder: 2)
+        let projects = [localA, localB, remote]
+
+        let priorActive = Preferences.shared.activeProjectID
+        defer { Preferences.shared.activeProjectID = priorActive }
+
+        let writerQuick = QuickTerminalSplitState()
+        let writer = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: files,
+            quickTerminal: writerQuick
+        )
+        writer.incubatePane = { _ in }
+        writer.selectProject(localA)
+        _ = writer.createTab(projectID: localA.id, projects: projects)
+        writer.selectProject(localB)
+        writer.selectProject(remote)
+        writer.selectProject(localA)
+        try writerQuick.split(paneID: #require(writerQuick.focusedPaneID), direction: .horizontal)
+        let deadQuickTabID = writerQuick.tab.id
+        let w1 = WindowState(activeProjectID: localA.id)
+        w1.expandedProjects = [localA.id, localB.id, remote.id]
+        let w2 = WindowState(activeProjectID: localB.id)
+        w2.expandedProjects = [localA.id, localB.id, remote.id]
+        writer.registerWindow(w1)
+        writer.registerWindow(w2)
+        writer.noteKeyWindow(w1)
+        writer.saveWorkspaces()
+        Preferences.shared.activeProjectID = localA.id
+
+        // Simulate a Mac restart: the local server reports zero running sessions.
+        let readerQuick = QuickTerminalSplitState()
+        let freshQuickID = readerQuick.tab.id
+        let reader = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: files,
+            quickTerminal: readerQuick
+        )
+        var warmed: [Pane] = []
+        reader.incubatePane = { warmed.append($0) }
+        reader.restoreSelection(projects: projects, aliveLocalSessions: [])
+        let first = WindowState()
+        reader.restoreWindows(adopting: first)
+        reader.registerWindow(first)
+        let second = WindowState()
+        reader.registerWindow(second)
+
+        // Local projects stay in the workspaces table as empty, with zero shells warmed.
+        #expect(reader.workspaces[localA.id]?.tabs.isEmpty == true)
+        #expect(reader.workspaces[localB.id]?.tabs.isEmpty == true)
+        #expect(warmed.isEmpty)
+
+        // Pruned-to-empty local projects collapsed in every restored window;
+        // the remote project with its surviving tab stayed expanded.
+        #expect(first.expandedProjects == [remote.id])
+        #expect(second.expandedProjects == [remote.id])
+
+        // Remote project kept its tab.
+        #expect(reader.workspaces[remote.id]?.tabs.count == 1)
+
+        // Selecting another empty project does not create a default shell.
+        reader.selectProject(localB)
+        #expect(reader.workspaces[localB.id]?.tabs.isEmpty == true)
+
+        // Quick terminal dropped the dead split and kept its fresh single-pane tab.
+        #expect(readerQuick.tab.id == freshQuickID)
+        #expect(readerQuick.tab.id != deadQuickTabID)
+        #expect(readerQuick.tab.splitRoot.allPanes().count == 1)
+
+        // Creating the first tab in a collapsed empty project expands its section.
+        reader.noteKeyWindow(first)
+        _ = reader.createTab(projectID: localA.id, projects: projects)
+        #expect(reader.workspaces[localA.id]?.tabs.count == 1)
+        #expect(first.expandedProjects.contains(localA.id))
+    }
+
+    @Test
+    func launch_after_reboot_drops_dead_scratch_tabs_and_clears_scratch_window_selection() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-reboot-scratch-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let files = makeProjectFileStore()
+
+        let priorActive = Preferences.shared.activeProjectID
+        defer { Preferences.shared.activeProjectID = priorActive }
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: storeURL), projectFiles: files)
+        _ = try #require(writer.createScratchTab())
+        let win = WindowState(activeProjectID: ScratchTabs.projectID)
+        writer.registerWindow(win)
+        writer.noteKeyWindow(win)
+        writer.saveWorkspaces()
+        Preferences.shared.activeProjectID = ScratchTabs.projectID
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: storeURL), projectFiles: files)
+        reader.restoreSelection(projects: [], aliveLocalSessions: [])
+        let first = WindowState()
+        reader.restoreWindows(adopting: first)
+
+        #expect(!reader.hasScratchTabs)
+        #expect(reader.activeProjectID == nil)
+        #expect(first.activeProjectID == nil)
+    }
+
+    @Test
+    func launch_after_normal_quit_keeps_surviving_local_tabs_and_quick_terminal() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-relaunch-alive-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let files = makeProjectFileStore()
+        let project = Project(name: "hermit", path: dir.path, sortOrder: 0)
+
+        let writerQuick = QuickTerminalSplitState()
+        let writer = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: files,
+            quickTerminal: writerQuick
+        )
+        writer.incubatePane = { _ in }
+        writer.selectProject(project)
+        _ = writer.createTab(projectID: project.id, projects: [project])
+        let tabSessionNames = try #require(writer.workspaces[project.id]).tabs
+            .flatMap { $0.splitRoot.allPanes().map(\.sessionName) }
+        let quickSessionName = try #require(writerQuick.tab.focusedPane?.sessionName)
+        let w1 = WindowState(activeProjectID: project.id)
+        w1.expandedProjects = [project.id]
+        writer.registerWindow(w1)
+        writer.saveWorkspaces()
+
+        let alive = Set(tabSessionNames + [quickSessionName])
+        let readerQuick = QuickTerminalSplitState()
+        let reader = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: files,
+            quickTerminal: readerQuick
+        )
+        reader.incubatePane = { _ in }
+        reader.restoreSelection(projects: [project], aliveLocalSessions: alive)
+        let first = WindowState()
+        reader.restoreWindows(adopting: first)
+
+        #expect(reader.workspaces[project.id]?.tabs.count == 2)
+        #expect(first.expandedProjects == [project.id])
+        #expect(readerQuick.tab.id == writerQuick.tab.id)
+    }
+
+    @Test
+    func first_v2_launch_still_ends_v1_sessions_when_dead_local_tabs_are_pruned() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-v1-prune-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let files = makeProjectFileStore()
+        let project = Project(name: "legacy", path: dir.path, sortOrder: 0)
+
+        let writer = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: files,
+            quickTerminal: QuickTerminalSplitState()
+        )
+        writer.incubatePane = { _ in }
+        writer.selectProject(project)
+        let session = try #require(writer.workspaces[project.id]?.tabs.first?.focusedPane?.sessionName)
+        writer.saveWorkspaces()
+
+        let ended = KilledSessions()
+        var zmx = ZmxClient.noop
+        zmx.endV1Sessions = { names in
+            for name in names {
+                await ended.append(name)
+            }
+            return true
+        }
+        let endedFlag = LockedBox(false)
+        let reader = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: files,
+            quickTerminal: QuickTerminalSplitState()
+        )
+        reader.zmx = zmx
+        reader.v1SessionsEnded = .init(read: { endedFlag.value }, write: { endedFlag.mutate { $0 = true } })
+        reader.restoreSelection(projects: [project], aliveLocalSessions: [])
+
+        await ended.settle(expecting: 1)
+        #expect(reader.workspaces[project.id]?.tabs.isEmpty == true)
+        #expect(await ended.names.contains(session))
+    }
 }
 
 /// Actor recording killed session names across the fire-and-forget kill tasks.

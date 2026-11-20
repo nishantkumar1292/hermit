@@ -18,7 +18,7 @@ To list the live sessions, run this command in any pane:
 macterm session list
 ```
 
-> Local sessions do not keep running after you restart your Mac. The panes start again in their last working directory. Sessions in [remote projects](/docs/remote-projects) run on the host, so they keep running.
+> Local sessions do not keep running after you restart your Mac. When you start Macterm again, it closes the panes whose local sessions ended and keeps your projects in the sidebar. Pinned tabs and desktop widgets start again from their saved layouts. Sessions in [remote projects](/docs/remote-projects) run on the host, so they keep running.
 
 ## Privacy prompts
 

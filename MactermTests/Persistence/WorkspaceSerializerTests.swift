@@ -578,4 +578,159 @@ struct WorkspaceSerializerSessionIdentityTests {
         #expect(pane.sessionSlug == "oldname")
         #expect(pane.projectPath == "/tmp/renamed-project/src")
     }
+
+    // MARK: - Pruning dead local sessions
+
+    @Test
+    func pruning_with_empty_alive_set_drops_dead_local_tabs_and_keeps_empty_workspace() throws {
+        // After a Mac restart, the local server lists no running sessions.
+        // Every dead local tab closes, stale attention flags go with it, and
+        // the workspace comes back empty so the project stays in the sidebar.
+        let projectID = UUID()
+        let ws = Workspace(projectID: projectID, projectPath: "/tmp/proj")
+        let second = ws.createTab(projectPath: "/tmp/proj")
+        if let pane = second.focusedPane {
+            pane.recordUserInteraction()
+            pane.markCommandRunning()
+            pane.markProgressFinished(failed: true)
+        }
+        let snaps = WorkspaceSerializer.snapshot([projectID: ws])
+
+        let restored = try #require(
+            WorkspaceSerializer.restore(from: snaps, validIDs: [projectID], aliveLocalSessions: []).first
+        )
+        #expect(restored.projectID == projectID)
+        #expect(restored.tabs.isEmpty)
+        #expect(restored.activeTabID == nil)
+    }
+
+    @Test
+    func pruning_with_nil_alive_set_fails_closed_and_keeps_all_tabs() throws {
+        // When the server does not answer, restore keeps every tab.
+        let projectID = UUID()
+        let ws = Workspace(projectID: projectID, projectPath: "/tmp/proj")
+        _ = ws.createTab(projectPath: "/tmp/proj")
+        let snaps = WorkspaceSerializer.snapshot([projectID: ws])
+
+        let restored = try #require(
+            WorkspaceSerializer.restore(from: snaps, validIDs: [projectID], aliveLocalSessions: nil).first
+        )
+        #expect(restored.tabs.count == 2)
+    }
+
+    @Test
+    func pruning_keeps_running_local_tabs_and_drops_ended_ones() throws {
+        let projectID = UUID()
+        let ws = Workspace(projectID: projectID, projectPath: "/tmp/proj")
+        let first = ws.tabs[0]
+        let second = ws.createTab(projectPath: "/tmp/proj")
+        second.customTitle = "Running"
+        let firstSession = try #require(first.focusedPane?.sessionName)
+        let secondSession = try #require(second.focusedPane?.sessionName)
+        // Select the tab whose session ended: activeTabID must fall back to the
+        // surviving tab.
+        ws.selectTab(first.id)
+        let snaps = WorkspaceSerializer.snapshot([projectID: ws])
+
+        let restored = try #require(
+            WorkspaceSerializer.restore(
+                from: snaps,
+                validIDs: [projectID],
+                aliveLocalSessions: [secondSession]
+            ).first
+        )
+        #expect(restored.tabs.map(\.id) == [second.id])
+        #expect(restored.tabs[0].customTitle == "Running")
+        #expect(restored.activeTabID == second.id)
+        #expect(restored.tabs[0].focusedPane?.sessionName == secondSession)
+        #expect(restored.tabs[0].focusedPane?.sessionName != firstSession)
+    }
+
+    @Test
+    func pruning_collapses_a_split_when_one_side_ended_and_drops_when_both_ended() throws {
+        let projectID = UUID()
+        let ws = Workspace(projectID: projectID, projectPath: "/tmp/proj")
+        let tab = ws.tabs[0]
+        let firstPane = try #require(tab.focusedPane)
+        let secondPaneID = try #require(tab.split(paneID: firstPane.id, direction: .horizontal))
+        let secondPane = try #require(tab.splitRoot.findPane(id: secondPaneID))
+        let snaps = WorkspaceSerializer.snapshot([projectID: ws])
+
+        // Both running: keep the split.
+        let bothAlive = try #require(
+            WorkspaceSerializer.restore(
+                from: snaps,
+                validIDs: [projectID],
+                aliveLocalSessions: [firstPane.sessionName, secondPane.sessionName]
+            ).first
+        )
+        #expect(bothAlive.tabs.count == 1)
+        #expect(bothAlive.tabs[0].splitRoot.allPanes().count == 2)
+
+        // One ended: collapse to the surviving pane.
+        let oneAlive = try #require(
+            WorkspaceSerializer.restore(
+                from: snaps,
+                validIDs: [projectID],
+                aliveLocalSessions: [secondPane.sessionName]
+            ).first
+        )
+        #expect(oneAlive.tabs.count == 1)
+        let surviving = oneAlive.tabs[0].splitRoot.allPanes()
+        #expect(surviving.map(\.sessionName) == [secondPane.sessionName])
+        #expect(oneAlive.tabs[0].focusedPaneID == surviving.first?.id)
+
+        // Both ended: drop the tab.
+        let noneAlive = try #require(
+            WorkspaceSerializer.restore(from: snaps, validIDs: [projectID], aliveLocalSessions: []).first
+        )
+        #expect(noneAlive.tabs.isEmpty)
+    }
+
+    @Test
+    func pruning_always_keeps_remote_panes_even_when_no_local_session_runs() throws {
+        let projectID = UUID()
+        let remotePane = Pane(projectPath: "devbox:~/repo", projectID: projectID)
+        let localPane = Pane(projectPath: "/tmp/local", projectID: projectID)
+        let mixedTab = TerminalTab(
+            id: UUID(),
+            splitRoot: .split(SplitBranch(direction: .horizontal, first: .pane(remotePane), second: .pane(localPane))),
+            focusedPaneID: localPane.id
+        )
+        let remoteOnlyTab = TerminalTab(projectPath: "devbox:~/other", projectID: projectID)
+        let ws = Workspace(projectID: projectID, tabs: [mixedTab, remoteOnlyTab], activeTabID: mixedTab.id)
+        let snaps = WorkspaceSerializer.snapshot([projectID: ws])
+
+        let restored = try #require(
+            WorkspaceSerializer.restore(from: snaps, validIDs: [projectID], aliveLocalSessions: []).first
+        )
+        #expect(restored.tabs.count == 2)
+        // Mixed split collapses to its surviving remote pane.
+        let mixedPanes = restored.tabs[0].splitRoot.allPanes()
+        #expect(mixedPanes.count == 1)
+        #expect(mixedPanes[0].isRemote)
+        #expect(mixedPanes[0].sessionName == remotePane.sessionName)
+        // Pure remote tab stays intact.
+        #expect(restored.tabs[1].splitRoot.allPanes().count == 1)
+        #expect(restored.tabs[1].splitRoot.allPanes()[0].isRemote)
+    }
+
+    @Test
+    func pruning_drops_legacy_local_pane_without_session_name() throws {
+        let projectID = UUID()
+        let snap = WorkspaceSnapshot(
+            projectID: projectID,
+            activeTabID: nil,
+            tabs: [TabSnapshot(
+                id: UUID(),
+                customTitle: nil,
+                focusedPaneID: nil,
+                splitRoot: .pane(PaneSnapshot(id: UUID(), projectPath: "/tmp/legacy", sessionName: nil))
+            )]
+        )
+        let restored = try #require(
+            WorkspaceSerializer.restore(from: [snap], validIDs: [projectID], aliveLocalSessions: []).first
+        )
+        #expect(restored.tabs.isEmpty)
+    }
 }
