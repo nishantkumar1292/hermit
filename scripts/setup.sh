@@ -38,7 +38,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # for it. Any
 # same-day push to the fork's main — the nightly sync included — deletes and
 # recreates a daily tag with different bytes, the asset-swap-under-a-pin hazard
-# documented in AGENTS.md; the stamp below can't tell copies apart, so a
+# documented in Macterm/Ghostty/AGENTS.md; the stamp below can't tell copies apart, so a
 # checkout holding a stale copy needs `rm -rf GhosttyKit.xcframework
 # Macterm/Resources/terminfo && mise run setup` once. CI's download cache
 # hashes this file, so a bump here also refreshes it.
@@ -389,7 +389,7 @@ if $need_xcframework; then
     echo "The macterm/ghostty output-activity downstream patch must have a release first." >&2
     echo "" >&2
     echo "Note: Macterm needs this ABI since the change for reliable activity detection" >&2
-    echo "(see the GhosttyKit note in AGENTS.md). A checkout from BEFORE that" >&2
+    echo "(see Macterm/Ghostty/AGENTS.md). A checkout from BEFORE that" >&2
     echo "commit does not need it, for example while you bisect. In that case, extract" >&2
     echo "a GhosttyKit from a $FORK_REPO release of the same time. Do not run setup." >&2
     echo "Setup did not change any existing $XCFRAMEWORK_DIR." >&2

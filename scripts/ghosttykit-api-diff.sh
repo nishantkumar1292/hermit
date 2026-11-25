@@ -3,7 +3,7 @@
 # actually uses.
 #
 # Why this exists: `ghostty-internal` is not a supported external API (see the
-# GhosttyKit note in AGENTS.md), so a bump can move anything. The header is
+# terminal core in AGENTS.md), so a bump can move anything. The header is
 # ~1200 lines and a week of upstream churn touches plenty of it, almost none of
 # which we call — telling a reviewer to "skim the compare view" means the few
 # lines that matter are buried. This filters the diff down to the symbols our

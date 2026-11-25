@@ -63,6 +63,9 @@ targets:
           - "Resources/terminfo"
           - "Resources/zmx"
           - "AppIcon.icon"
+          # The maps of the code for agents, not resources.
+          - "**/AGENTS.md"
+          - "**/CLAUDE.md"
       # Ghostty resources (themes + shell-integration), downloaded by setup.sh.
       # Folder reference (not the default "group") because the contents are
       # extensionless files Xcode would otherwise skip. Lands at
@@ -245,6 +248,9 @@ targets:
     platform: macOS
     sources:
       - path: CLI
+        excludes:
+          - "AGENTS.md"
+          - "CLAUDE.md"
       - path: Macterm/Control/ControlProtocol.swift
       - path: Macterm/System/SSHWrapper.swift
       - path: Macterm/Palette/Custom/CustomPaletteLaunch.swift
@@ -299,7 +305,10 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - MactermTests
+      - path: MactermTests
+        excludes:
+          - AGENTS.md
+          - CLAUDE.md
     dependencies:
       - target: Macterm
     settings:

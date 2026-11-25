@@ -1,0 +1,1 @@
+../Macterm/Control/AGENTS.md

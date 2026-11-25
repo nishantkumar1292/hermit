@@ -1,0 +1,65 @@
+# Names in AGENTS.md files that are not in this tree, for scripts/check-agents.py.
+# One code span for each line, exactly as an AGENTS.md writes it. The check
+# fails on a line here that no AGENTS.md uses, so this list cannot go stale.
+
+# The macterm/ghostty fork (its patch files and its Zig source).
+CellClass.eol
+Comet.Carry
+CursorGlide
+CursorGlide.Comet
+CursorGlide.trail
+GHOSTTY_NULLABLE
+Geometry.terminal_height
+RenderState.Geometry
+Mods.ctrlOrSuper
+RenderState.RegionShifts
+RenderState.Shift.rowsAboveAt
+RenderState.resolveShift
+Screen.commandInputString
+Screen.viewport_offset_eases
+Screen.viewport_pixel_offset
+Selection.expandToLines
+Surface.posToViewport
+Surface.rowScrollOffset
+Terminal.flags.selection_cursor
+Uniforms.cursor_comet
+adjust_selection
+animationWake
+beginShiftedUpdate
+build-ghosttykit.yml
+cursor_glide_text
+cursor_pos
+decayViewportScroll
+grid_padding
+grow_until
+render.zig
+renderer/cursor.zig
+resolveShift
+rowScrollOffset
+scrollToSelectionHead
+scroll_offset
+scroll_offset.w
+settle_from
+toggle_split_zoom
+
+# Helix and Zed, the references of the copy-mode word motions.
+crates/vim/src/helix.rs
+helix-core/src/movement.rs
+range_to_target
+
+# Apple frameworks, daemons and tools.
+Contents/Resources/Metadata.appintents/extract.actionsdata
+NSFullScreenMenuItemEverywhere
+PrivateCloudComputeLanguageModel
+ictool
+linkd
+modelmanagerd
+
+# Other tools: Helix's theme key, a file name in a demo's traceback, the
+# STE skill (git ignores .claude/).
+.claude/skills/asd-ste100/
+os.py
+ui.cursor
+
+# A placeholder, not a name.
+noun.verb

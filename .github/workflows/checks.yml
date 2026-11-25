@@ -66,3 +66,13 @@ jobs:
 
       - name: Lint
         run: mise run lint --verbose
+
+  # Each symbol and path that an AGENTS.md names exists in the tree. It runs on
+  # every commit, because a change to any file can remove a name.
+  agents:
+    name: Agents Map
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: useblacksmith/checkout@v1
+      - name: Check Agents Map
+        run: python3 scripts/check-agents.py

@@ -23,8 +23,8 @@ description: >-
 # Missing secrets FAIL rather than falling back to ad-hoc: a silent fallback
 # would ship an update that resets every user's grants once more, which is
 # exactly the bug this exists to fix — and the next properly-signed release
-# would reset them yet again. The generation recipe lives in AGENTS.md's
-# Releasing section (a once-a-decade ceremony, so no script); never rotate the
+# would reset them yet again. The generation recipe lives in the git history
+# of the root AGENTS.md, section Releasing (a once-a-decade ceremony, so no script); never rotate the
 # cert casually (a new cert is one more reset), and back it up like the Sparkle
 # private key.
 
@@ -48,7 +48,7 @@ runs:
         if [[ -z "$MACTERM_SIGNING_CERT_P12" || -z "$MACTERM_SIGNING_CERT_PASSWORD" ]]; then
           echo "error: MACTERM_SIGNING_CERT_P12 / MACTERM_SIGNING_CERT_PASSWORD repo secrets are not set." >&2
           echo "Releases are signed with a stable certificate so users' privacy grants survive" >&2
-          echo "updates. Follow the recipe in AGENTS.md's Releasing section to create the cert" >&2
+          echo "updates. Follow the recipe in the git history of the root AGENTS.md to create the cert" >&2
           echo "and add the secrets." >&2
           exit 1
         fi
