@@ -1,7 +1,7 @@
 name: Session Benchmark
 
 # The v1/v2 session layer benchmark and its gate (scripts/session_bench.py).
-# AGENTS.md ("Session layer benchmark") says what it measures and when it
+# scripts/AGENTS.md ("Session layer benchmark") says what it measures and when it
 # fails. The workflow starts on every pull request, so that its checks report
 # also where they are required. The measuring jobs skip when the pull request
 # changes no file of the session layer.

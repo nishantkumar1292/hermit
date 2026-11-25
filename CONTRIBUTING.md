@@ -168,7 +168,7 @@ CI blocks your PR when one of these checks fails. Run them on your Mac first to 
 
 ## Docs
 
-- `CLAUDE.md` is a symlink to [`AGENTS.md`](AGENTS.md). Edit `AGENTS.md`.
+- `CLAUDE.md` is a symlink to [`AGENTS.md`](AGENTS.md) in the root and in each folder that has one. Edit `AGENTS.md`. The root file is the map, and each folder's file has the rules of that folder.
 - The user docs are in [`docs/`](docs). Each page is one Markdown file. The site that renders them is [macterm/website](https://github.com/macterm/website). To build and serve the site with your changes, clone it, run `bun install` in it, and then run `MACTERM_DIR=<path of this checkout> bun run dev`. You need [Bun](https://bun.sh) and [Caddy](https://caddyserver.com).
 - Write all text in ASD-STE100 style. Read [`WRITING.md`](WRITING.md) for the Macterm word list.
 
