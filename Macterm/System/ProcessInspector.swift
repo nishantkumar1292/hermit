@@ -191,20 +191,16 @@ enum ProcessInspector {
         return comm
     }
 
-    /// The name `pid` was invoked as, or nil. Unlike `comm` — the
-    /// *executable's* basename, which for some CLIs is an arch- or
-    /// version-named binary — argv names what the user actually ran
+    /// The name a process was invoked as, from its argv, or nil. Unlike
+    /// `comm` — the *executable's* basename, which for some CLIs is an arch-
+    /// or version-named binary — argv names what the user actually ran
     /// (`claude`, `codex`). Used as the agent-icon fallback when `comm`
-    /// doesn't identify an agent. See `invokedName(argv:)` for the shape.
-    static func invokedNameBasename(pid: pid_t) -> String? {
-        guard let args = argv(pid: pid) else { return nil }
-        return invokedName(argv: args)
-    }
-
-    /// Testable core of `invokedNameBasename`: argv[0]'s basename (login-shell
-    /// `-` stripped) — or, when argv[0] is an interpreter (`node …/bin/pi`),
-    /// the script's basename from argv[1] with a script extension stripped,
-    /// so an npm-installed CLI still yields its command name.
+    /// doesn't identify an agent (`AgentIcon.match(comm:argv:)`).
+    ///
+    /// It is argv[0]'s basename (login-shell `-` stripped) — or, when argv[0]
+    /// is an interpreter (`node …/bin/pi`), the script's basename from
+    /// argv[1] with a script extension stripped, so an npm-installed CLI
+    /// still yields its command name.
     static func invokedName(argv args: [String]) -> String? {
         guard var first = args.first, !first.isEmpty else { return nil }
         if first.hasPrefix("-") { first.removeFirst() }
