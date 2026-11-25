@@ -138,7 +138,7 @@ final class Pane: Identifiable {
 
     /// The AI coding agent in this pane's foreground (claude, codex, …), for
     /// the sidebar's agent logo. Derived in `applyForegroundRefresh` from the
-    /// foreground process's `comm`/argv[0] and cached against the pid, so the
+    /// foreground process's `comm`/argv and cached against the pid, so the
     /// poll's steady ticks don't re-read argv or churn `@Observable`. The
     /// remote path (`applyRemoteForeground`) writes it from the host's report.
     /// When Claude leaves the foreground, its open question goes with it
@@ -364,7 +364,7 @@ final class Pane: Identifiable {
         // (`applyRemoteForeground`), titles from `receiveRemoteReportedTitle`,
         // execution state from OSC 133 markers and activity heartbeats.
         guard !isRemote else { return }
-        // Resolved ONCE and reused below, including inside the argv0 closure —
+        // Resolved ONCE and reused below, including inside the argv closure —
         // re-resolving there could disagree with this frame's pid on a wrapped
         // pane and would double the resolver work when the fallback fires.
         let resolvedPID = ProcessInspector.resolvedForegroundPID(forPane: self)
@@ -381,7 +381,7 @@ final class Pane: Identifiable {
             foregroundPID: resolvedPID,
             foregroundIsShell: ProcessInspector.foregroundProcessIsShell(forPane: self),
             terminalInputIsRaw: ProcessInspector.terminalInputIsRaw(forPane: self),
-            argv0: { resolvedPID.flatMap(ProcessInspector.invokedNameBasename(pid:)) }
+            argv: { resolvedPID.flatMap(ProcessInspector.argv(pid:)) }
         )
     }
 
@@ -419,7 +419,7 @@ final class Pane: Identifiable {
         foregroundPID: pid_t?,
         foregroundIsShell: Bool = false,
         terminalInputIsRaw: Bool = false,
-        argv0: () -> String? = { nil }
+        argv: () -> [String]? = { nil }
     ) {
         // A prompt hook must not rename the tab. Title expiry below is NOT
         // gated: a changed pid means the title's owner lost the foreground, and
@@ -435,11 +435,11 @@ final class Pane: Identifiable {
                 )
             }
             // A steady foreground (same pid, same comm) keeps the cached icon; a
-            // change re-matches — argv[0] is only read when comm alone doesn't
+            // change re-matches — argv is only read when comm alone doesn't
             // identify an agent.
             if nameChanged || foregroundPID != agentIconPID {
                 agentIconPID = foregroundPID
-                let icon = foregroundPID == nil ? nil : AgentIcon.match(comm: name, argv0: argv0)
+                let icon = foregroundPID == nil ? nil : AgentIcon.match(comm: name, argv: argv)
                 if icon != agentIcon { agentIcon = icon }
             }
         }
@@ -786,18 +786,12 @@ final class Pane: Identifiable {
             programTitle = nil
         }
         // The agent logo, by the local rule: `comm` first, then the invoked
-        // name, which the report's `ps -o args=` carries in place of the local
-        // KERN_PROCARGS2 argv. Re-matched only when the report changes, as
-        // the local path caches against the pid.
+        // name and the Cursor `agent` alias, from the report's `ps -o args=`
+        // in place of the local KERN_PROCARGS2 argv. Re-matched only when the
+        // report changes, as the local path caches against the pid.
         guard foreground != lastAppliedRemoteForeground else { return }
         lastAppliedRemoteForeground = foreground
-        let icon = isIdleShell ? nil : AgentIcon.match(comm: name) {
-            foreground.command.flatMap { command in
-                ProcessInspector.remoteInvokedNames(commandLine: command).first {
-                    AgentIcon.match(processName: $0) != nil
-                }
-            }
-        }
+        let icon = isIdleShell ? nil : AgentIcon.match(comm: name, commandLine: foreground.command)
         if icon != agentIcon { agentIcon = icon }
     }
 

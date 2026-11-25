@@ -591,25 +591,64 @@ struct PaneTests {
     func pane_caches_agent_across_steady_refreshes() {
         let pane = Pane(projectPath: "/", projectID: UUID())
         var argvReads = 0
-        let argv0: () -> String? = { argvReads += 1
-            return "claude"
+        let argv: () -> [String]? = { argvReads += 1
+            return ["claude"]
         }
-        pane.applyForegroundRefresh(name: "2.1.207", foregroundPID: 42, argv0: argv0)
+        pane.applyForegroundRefresh(name: "2.1.207", foregroundPID: 42, argv: argv)
         #expect(pane.agentIcon == .claude)
         #expect(argvReads == 1)
         // Same pid + comm on the next tick: cached, argv untouched.
-        pane.applyForegroundRefresh(name: "2.1.207", foregroundPID: 42, argv0: argv0)
+        pane.applyForegroundRefresh(name: "2.1.207", foregroundPID: 42, argv: argv)
         #expect(argvReads == 1)
         // Agent exits, shell takes the foreground.
-        pane.applyForegroundRefresh(name: "zsh", foregroundPID: 7, argv0: { nil })
+        pane.applyForegroundRefresh(name: "zsh", foregroundPID: 7, argv: { nil })
         #expect(pane.agentIcon == nil)
     }
 
     @Test
     func pane_has_no_agent_without_a_foreground_pid() {
         let pane = Pane(projectPath: "/", projectID: UUID())
-        pane.applyForegroundRefresh(name: nil, foregroundPID: nil, argv0: { "claude" })
+        pane.applyForegroundRefresh(name: nil, foregroundPID: nil, argv: { ["claude"] })
         #expect(pane.agentIcon == nil)
+    }
+
+    @Test
+    func pane_shows_cursor_for_its_agent_alias() {
+        // `agent` is the Cursor CLI's short symlink: comm is `node`, argv[0]
+        // is the typed path, and the script is under `cursor-agent`.
+        let pane = Pane(projectPath: "/", projectID: UUID())
+        var argvReads = 0
+        let argv: () -> [String]? = { argvReads += 1
+            return [
+                "/Users/me/.local/bin/agent",
+                "--disable-sigusr1",
+                "--use-system-ca",
+                "/Users/me/.local/share/cursor-agent/versions/2026.11.19-f005e9d/index.js",
+            ]
+        }
+        pane.applyForegroundRefresh(name: "node", foregroundPID: 42, argv: argv)
+        #expect(pane.agentIcon == .cursor)
+        #expect(argvReads == 1)
+        pane.applyForegroundRefresh(name: "node", foregroundPID: 42, argv: argv)
+        #expect(argvReads == 1)
+    }
+
+    @Test
+    func remote_pane_shows_cursor_for_its_agent_alias() {
+        let command = "/home/me/.local/bin/agent --use-system-ca "
+            + "/home/me/.local/share/cursor-agent/versions/2026.11.19-f005e9d/index.js"
+        let linux = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        linux.applyRemoteForeground(RemoteForeground(comm: "node", isIdle: false, command: command))
+        #expect(linux.agentIcon == .cursor)
+        // On macOS the host server reads comm with `proc_pidpath`, which gives
+        // the executable's path: the `node` that Cursor bundles.
+        let mac = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        mac.applyRemoteForeground(RemoteForeground(
+            comm: "/Users/me/.local/share/cursor-agent/versions/2026.11.19-f005e9d/node",
+            isIdle: false,
+            command: command
+        ))
+        #expect(mac.agentIcon == .cursor)
     }
 
     @Test
