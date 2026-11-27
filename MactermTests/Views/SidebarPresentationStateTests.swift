@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 @testable import Macterm
 import Testing
@@ -56,115 +55,94 @@ struct SidebarPresentationStateTests {
     }
 
     @Test
-    func a_shift_click_range_spans_every_row_between_the_two_ends() {
-        let state = SidebarPresentationState()
-        let projectID = UUID()
-        let tabs = (0 ..< 5).map { _ in UUID() }
-        state.orderedItems = [.project(projectID)]
-            + tabs.map { .tab(projectID: projectID, tabID: $0) }
-
-        let range = state.itemRange(
-            from: .tab(projectID: projectID, tabID: tabs[0]),
-            to: .tab(projectID: projectID, tabID: tabs[3])
-        )
-
-        #expect(range == tabs[0 ... 3].map { .tab(projectID: projectID, tabID: $0) })
-    }
-
-    @Test
-    func a_shift_click_range_reads_the_same_dragged_upward() {
-        let state = SidebarPresentationState()
-        let projectID = UUID()
-        let tabs = (0 ..< 3).map { _ in UUID() }
-        state.orderedItems = tabs.map { .tab(projectID: projectID, tabID: $0) }
-
-        let up = state.itemRange(
-            from: .tab(projectID: projectID, tabID: tabs[2]),
-            to: .tab(projectID: projectID, tabID: tabs[0])
-        )
-
-        #expect(up == state.orderedItems)
-    }
-
-    @Test
-    func a_range_off_a_vanished_row_is_nil_rather_than_a_wrong_span() {
+    func primary_action_opens_inline_rename_for_a_single_tab() {
         let state = SidebarPresentationState()
         let projectID = UUID()
         let tabID = UUID()
-        state.orderedItems = [.tab(projectID: projectID, tabID: tabID)]
 
-        // The anchor's tab was closed (or its project collapsed) since the
-        // click that set it — the caller selects just the clicked row.
-        #expect(state.itemRange(
-            from: .tab(projectID: projectID, tabID: UUID()),
-            to: .tab(projectID: projectID, tabID: tabID)
-        ) == nil)
+        let started = state.beginPrimaryActionRename(for: [.tab(projectID: projectID, tabID: tabID)]) { _ in
+            SidebarRenameSeed(target: .tab(tabID), text: "API", originalCustomTitle: "API")
+        }
+
+        #expect(started)
+        #expect(state.isRenaming(.tab(tabID)))
+        #expect(state.renameText == "API")
+        #expect(state.originalCustomTitle == "API")
     }
 
     @Test
-    func a_plain_click_replaces_the_whole_selection() {
-        let state = SidebarPresentationState()
-        let projects = (0 ..< 3).map { _ in UUID() }
-        state.orderedItems = projects.map { .project($0) }
-        state.selection = [.project(projects[0]), .project(projects[1])]
-
-        state.selectRow(.project(projects[2]), modifiers: [])
-
-        #expect(state.selection == [.project(projects[2])])
-    }
-
-    @Test
-    func a_command_click_toggles_one_row_without_disturbing_the_rest() {
-        let state = SidebarPresentationState()
-        let projects = (0 ..< 2).map { _ in UUID() }
-        state.orderedItems = projects.map { .project($0) }
-        state.selection = [.project(projects[0])]
-
-        state.selectRow(.project(projects[1]), modifiers: .command)
-        #expect(state.selection == [.project(projects[0]), .project(projects[1])])
-
-        state.selectRow(.project(projects[1]), modifiers: .command)
-        #expect(state.selection == [.project(projects[0])])
-    }
-
-    @Test
-    func a_shift_click_selects_every_row_between_the_anchor_and_the_click() {
+    func primary_action_opens_inline_rename_for_a_single_project() {
         let state = SidebarPresentationState()
         let projectID = UUID()
-        let tabs = (0 ..< 4).map { _ in UUID() }
-        state.orderedItems = [.project(projectID)]
-            + tabs.map { .tab(projectID: projectID, tabID: $0) }
-        state.selectionAnchor = .tab(projectID: projectID, tabID: tabs[0])
 
-        state.selectRow(.tab(projectID: projectID, tabID: tabs[3]), modifiers: .shift)
+        let started = state.beginPrimaryActionRename(for: [.project(projectID)]) { _ in
+            SidebarRenameSeed(target: .project(projectID), text: "Hermit")
+        }
 
-        // All four, not just the two ends — the bulk close acts on this set.
-        #expect(state.selection.count == 4)
-        #expect(state.selection == Set(tabs.map { .tab(projectID: projectID, tabID: $0) }))
+        #expect(started)
+        #expect(state.isRenaming(.project(projectID)))
+        #expect(state.renameText == "Hermit")
+        #expect(state.originalCustomTitle == nil)
     }
 
     @Test
-    func a_shift_click_spans_a_project_header_and_its_tabs_alike() {
+    func primary_action_ignores_multi_selection_and_empty_selection() {
+        let state = SidebarPresentationState()
+        let projectID = UUID()
+        let first = SidebarItem.tab(projectID: projectID, tabID: UUID())
+        let second = SidebarItem.tab(projectID: projectID, tabID: UUID())
+
+        #expect(!state.beginPrimaryActionRename(for: []) { _ in
+            SidebarRenameSeed(target: .project(projectID), text: "Hermit")
+        })
+        #expect(!state.beginPrimaryActionRename(for: [first, second]) { _ in
+            SidebarRenameSeed(target: .project(projectID), text: "Hermit")
+        })
+        #expect(state.renameTarget == nil)
+    }
+
+    @Test
+    func primary_action_ignores_an_unresolved_row() {
+        let state = SidebarPresentationState()
+        let item = SidebarItem.tab(projectID: PinnedTabs.projectID, tabID: UUID())
+
+        let started = state.beginPrimaryActionRename(for: [item]) { _ in nil }
+
+        #expect(!started)
+        #expect(state.renameTarget == nil)
+    }
+
+    @Test
+    func primary_action_on_the_already_renaming_row_keeps_the_draft() {
         let state = SidebarPresentationState()
         let projectID = UUID()
         let tabID = UUID()
-        state.orderedItems = [.project(projectID), .tab(projectID: projectID, tabID: tabID)]
-        state.selectionAnchor = .project(projectID)
+        state.beginRename(.tab(tabID), text: "old", originalCustomTitle: "old")
+        state.renameText = "in progress"
 
-        state.selectRow(.tab(projectID: projectID, tabID: tabID), modifiers: .shift)
+        let started = state.beginPrimaryActionRename(for: [.tab(projectID: projectID, tabID: tabID)]) { _ in
+            SidebarRenameSeed(target: .tab(tabID), text: "old", originalCustomTitle: "old")
+        }
 
-        #expect(state.selection == Set(state.orderedItems))
+        #expect(!started)
+        #expect(state.renameText == "in progress")
     }
 
     @Test
-    func a_shift_click_with_no_anchor_selects_only_the_clicked_row() {
+    func primary_action_on_another_row_switches_the_rename_target() {
         let state = SidebarPresentationState()
         let projectID = UUID()
-        state.orderedItems = [.project(projectID)]
+        let firstTab = UUID()
+        let secondTab = UUID()
+        state.beginRename(.tab(firstTab), text: "first")
 
-        state.selectRow(.project(projectID), modifiers: .shift)
+        let started = state.beginPrimaryActionRename(for: [.tab(projectID: projectID, tabID: secondTab)]) { _ in
+            SidebarRenameSeed(target: .tab(secondTab), text: "", originalCustomTitle: nil)
+        }
 
-        #expect(state.selection == [.project(projectID)])
+        #expect(started)
+        #expect(state.isRenaming(.tab(secondTab)))
+        #expect(state.renameText.isEmpty)
     }
 
     /// The flag is one process-wide value (it gates a global retry loop), so
