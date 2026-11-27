@@ -27,6 +27,7 @@ When you hold the Recent Tab chord, `TabSwitcherOverlay` shows one card for each
   - Macterm centers a restored frame on the main screen at its saved size when it has less than 60 pt on any screen. An example is the corner of a hidden workspace of a window manager.
 - **Never leave persistent window state to an autosave of SwiftUI**. We measured every one of them (sidebar column, window frame). Each one uses a key with a runtime address, so it resets in silence at every launch and update. A stable key in `WindowSnapshot` is the rule.
 - **The overlay sidebar peek is a side panel, the same as the Project Insights panel** (`SidebarOverlayPanel`). It has the same surface (`glassPanel`) and the same corner and inset (`GlassPanelMetrics.sidePanelCornerRadius` and `sidePanelInset`), and it starts below the toolbar. Its hover exit edge counts the inset (`SidebarOverlayMetrics.exitEdge`).
+- **Never attach a SwiftUI tap gesture to a draggable sidebar `List` row** (`SidebarContent`). A child `.onTapGesture` or `TapGesture` makes SwiftUI's cell hosting view consume `mouseDown` before `NSOutlineView` sees it, which stops row drag-and-drop from starting over the title. Inline rename on double-click therefore runs from the list-level `.contextMenu(forSelectionType:menu:primaryAction:)` through `SidebarPresentationState.beginPrimaryActionRename`.
 
 - `Macterm/Views/`
   - `MainWindow`.

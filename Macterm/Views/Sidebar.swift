@@ -303,13 +303,18 @@ struct SidebarContent: View {
             //   every drag over the sidebar, so unhandled drops don't bubble
             //   to enclosing views.
         }
-        // A single list-level context menu instead of one per row: the native
-        // multi-select menu. Its closure receives the exact set the menu should
-        // act on — right-clicking inside a multi-selection yields all selected
-        // rows; right-clicking an unselected row yields just that row. This is
-        // what lets "Remove N Projects" / "Close N Tabs" work.
+        // A single list-level context menu and primary action instead of
+        // per-row gestures: the native multi-select menu and double-click
+        // handler. Never attach `.onTapGesture` or `TapGesture` inside a
+        // draggable `List` row: SwiftUI's cell hosting view claims `mouseDown`
+        // for any child tap gesture and never forwards it to `NSOutlineView`,
+        // which stops row drag-and-drop from starting over the title text.
+        // Using `primaryAction` keeps `NSOutlineView` in control of every
+        // click, multi-selection, and drag across the full row.
         .contextMenu(forSelectionType: SidebarItem.self) { items in
             contextMenu(for: items)
+        } primaryAction: { items in
+            beginPrimaryActionRename(for: items)
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
@@ -367,16 +372,7 @@ struct SidebarContent: View {
             // puts the ink an equal ~20.5pt off both the left and bottom edges.
             .padding(.bottom, 20)
         }
-        .onChange(of: orderedItems, initial: true) { _, items in
-            presentation.orderedItems = items
-        }
         .onChange(of: presentation.selection) { _, items in
-            // Whatever collapses the sidebar to a single row becomes the row a
-            // later shift-click extends from — a native click on a row's icon
-            // or padding, a title click, or `syncSelection` after a tab switch.
-            // Watching the selection rather than writing the anchor at each
-            // click site is what keeps ours and AppKit's the same row.
-            if items.count == 1 { presentation.selectionAnchor = items.first }
             // Navigation follows a single selection only. A multi-selection is
             // for bulk actions (delete), so it must not yank the active project
             // or tab around as rows are added to the selection.
@@ -445,7 +441,6 @@ struct SidebarContent: View {
                     tab: tab,
                     index: index + 1,
                     iconSymbolOverride: "pin",
-                    selectionItem: .tab(projectID: PinnedTabs.projectID, tabID: record.id),
                     presentation: presentation,
                     isInteractive: isInteractive,
                     onRename: { newName in
@@ -548,7 +543,6 @@ struct SidebarContent: View {
             // A scratch row has no project section around it, so its icon
             // says which rows these are, as the pin does for pinned rows.
             iconSymbolOverride: project.id == ScratchTabs.projectID ? ScratchTabs.iconSymbol : nil,
-            selectionItem: .tab(projectID: project.id, tabID: tab.id),
             presentation: presentation,
             isInteractive: isInteractive,
             projectColor: project.color,
@@ -620,26 +614,6 @@ struct SidebarContent: View {
             // drop stays on target.
             if targeted { windowState.expandedProjects.insert(project.id) }
         }
-    }
-
-    /// Every visible row in visual order, mirroring the `List` body: the
-    /// pinned records, then each project's header followed by its tabs while
-    /// that project is expanded. Published to `presentation` so a shift-click
-    /// on a row title can resolve the range between two rows — the List keeps
-    /// its own copy of this order for the clicks it still handles itself.
-    private var orderedItems: [SidebarItem] {
-        var items: [SidebarItem] = appState.pinnedRecords.map {
-            .tab(projectID: PinnedTabs.projectID, tabID: $0.id)
-        }
-        for project in projectStore.projects {
-            items.append(.project(project.id))
-            guard windowState.expandedProjects.contains(project.id) else { continue }
-            items.append(contentsOf: (appState.workspaces[project.id]?.tabs ?? []).map {
-                .tab(projectID: project.id, tabID: $0.id)
-            })
-        }
-        items.append(contentsOf: scratchTabs.map { .tab(projectID: ScratchTabs.projectID, tabID: $0.id) })
-        return items
     }
 
     /// The scratch rows, in order (#665).
@@ -1007,6 +981,28 @@ struct SidebarContent: View {
         }
     }
 
+    private func beginPrimaryActionRename(for items: Set<SidebarItem>) {
+        guard isInteractive else { return }
+        presentation.beginPrimaryActionRename(for: items) { renameSeed(for: $0) }
+    }
+
+    /// Resolves a double-clicked sidebar row to its inline rename seed, or nil
+    /// when the row cannot be renamed (for example, an unloaded pinned row).
+    private func renameSeed(for item: SidebarItem) -> SidebarRenameSeed? {
+        switch item {
+        case let .project(projectID):
+            guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return nil }
+            return SidebarRenameSeed(target: .project(project.id), text: project.name)
+        case let .tab(projectID, tabID):
+            guard let tab = appState.workspaces[projectID]?.tabs.first(where: { $0.id == tabID }) else { return nil }
+            return SidebarRenameSeed(
+                target: .tab(tab.id),
+                text: tab.customTitle ?? "",
+                originalCustomTitle: tab.customTitle
+            )
+        }
+    }
+
     private func requestProjectRename(_ projectID: UUID) {
         windowState.sidebarVisible = true
         DispatchQueue.main.async { appState.renamingProjectID = projectID }
@@ -1015,42 +1011,6 @@ struct SidebarContent: View {
     private func requestTabRename(_ tabID: UUID) {
         windowState.sidebarVisible = true
         DispatchQueue.main.async { appState.renamingTabID = tabID }
-    }
-}
-
-/// Makes a sidebar row's title open its inline rename on a double-click.
-///
-/// A title-level gesture owns the whole tap sequence, so the List row never
-/// sees a click that lands on the text — which is why selection has to be
-/// re-applied here rather than left to the List. Rename rides alongside as a
-/// simultaneous gesture so the first click still selects immediately.
-///
-/// The modifiers come off the event being handled, not the keyboard's live
-/// state whenever the gesture resolves: a Command released together with the
-/// mouse button would otherwise read as a plain click and collapse an
-/// in-progress multi-selection down to the clicked row.
-private struct InlineRenameClickTarget: ViewModifier {
-    let onSelect: (NSEvent.ModifierFlags) -> Void
-    let onBeginRename: () -> Void
-
-    private var modifiers: NSEvent.ModifierFlags {
-        (NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags)
-            .intersection(.deviceIndependentFlagsMask)
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .onTapGesture { onSelect(modifiers) }
-            .simultaneousGesture(TapGesture(count: 2).onEnded { onBeginRename() })
-    }
-}
-
-extension View {
-    func inlineRenameClickTarget(
-        onSelect: @escaping (NSEvent.ModifierFlags) -> Void,
-        onBeginRename: @escaping () -> Void
-    ) -> some View {
-        modifier(InlineRenameClickTarget(onSelect: onSelect, onBeginRename: onBeginRename))
     }
 }
 
@@ -1159,10 +1119,11 @@ private struct SidebarProjectHeader: View {
             isInteractive: isInteractive,
             onRename: onRename
         )
-        // Stretch to the full row so the drag grab area (and the drop band in
-        // the background of the enclosing header) covers the whole row, not
-        // just the label's intrinsic width — same treatment as the tab rows.
+        // Stretch to the full row and make every point hit-testable so the drag
+        // grab area covers the whole row, not just the label's intrinsic width
+        // — same treatment as the tab rows.
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         // Drag the header to reorder projects (replaces the removed
         // `.onMove`). Applied to the TITLE, INSIDE the reveal inset below, so
         // the revealed action is never part of the drag source: a press that
@@ -1311,6 +1272,7 @@ private struct TabStatusSlot: View {
             .hidden()
             .frame(width: projectActionSize)
             .overlay { TabStatusAccessory(status: status) }
+            .allowsHitTesting(false)
     }
 }
 
@@ -1350,7 +1312,6 @@ private struct SidebarProjectRow: View {
                         .help(project.path)
                 }
             }
-            .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
         }
     }
 
@@ -1379,11 +1340,6 @@ private struct SidebarProjectRow: View {
         }
     }
 
-    /// The row this header stands for — the same value the enclosing
-    /// `DisclosureGroup` tags itself with, so a title click highlights the
-    /// row the List would have highlighted.
-    private var selectionItem: SidebarItem { .project(project.id) }
-
     private func beginRename() {
         guard isInteractive else { return }
         presentation.beginRename(
@@ -1391,11 +1347,6 @@ private struct SidebarProjectRow: View {
             text: project.name
         )
         appState.renamingProjectID = nil
-    }
-
-    private func select(_ modifiers: NSEvent.ModifierFlags) {
-        guard isInteractive else { return }
-        presentation.selectRow(selectionItem, modifiers: modifiers)
     }
 
     private func commit() {
@@ -1417,7 +1368,6 @@ private struct SidebarTabRow: View {
     /// Fixed icon overriding the user's `tabIconSymbol` preference — the
     /// pinned rows pass "pin" so the icon itself marks the row's kind.
     var iconSymbolOverride: String?
-    let selectionItem: SidebarItem
     @Bindable
     var presentation: SidebarPresentationState
     let isInteractive: Bool
@@ -1457,7 +1407,6 @@ private struct SidebarTabRow: View {
             }
         } else {
             TabRowTitle(tab: tab)
-                .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
         }
     }
 
@@ -1525,11 +1474,6 @@ private struct SidebarTabRow: View {
             originalCustomTitle: tab.customTitle
         )
         appState.renamingTabID = nil
-    }
-
-    private func select(_ modifiers: NSEvent.ModifierFlags) {
-        guard isInteractive else { return }
-        presentation.selectRow(selectionItem, modifiers: modifiers)
     }
 
     private func commit() {
